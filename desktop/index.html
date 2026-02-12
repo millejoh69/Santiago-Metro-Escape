@@ -3,1234 +3,1313 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>METRO DIVIDE - Level 1</title>
+  <title>Santiago Metro Escape - Level 1</title>
   <style>
-    html, body {
-      margin: 0; height: 100%;
-      background: #070b10;
-      color: #e8f1ff;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      overflow: hidden;
-    }
-    #wrap {
-      position: fixed; inset: 0;
-      display: grid;
-      place-items: center;
-    }
+    html, body { margin:0; height:100%; background:#060A10; color:#E8F1FF; overflow:hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    #wrap { position:fixed; inset:0; display:grid; place-items:center; }
     canvas {
-      width: min(96vw, 1120px);
-      aspect-ratio: 16 / 10;
-      background: #000;
+      width: min(96vw, 1180px);
+      aspect-ratio: 16/10;
       border-radius: 14px;
-      border: 1px solid rgba(232,241,255,0.16);
-      box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+      border: 1px solid rgba(232,241,255,0.14);
+      box-shadow: 0 14px 42px rgba(0,0,0,0.40);
+      background:#000;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
     .hint {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 14px;
-      font-size: 12px;
-      opacity: 0.75;
-      text-align: center;
-      padding: 8px 10px;
-      border-radius: 999px;
-      background: rgba(5,10,16,0.55);
+      position: fixed; left:50%; transform:translateX(-50%); bottom:14px;
+      font-size:12px; opacity:0.8; text-align:center;
+      padding:8px 12px; border-radius:999px;
+      background: rgba(7,12,18,0.55);
       border: 1px solid rgba(232,241,255,0.14);
       backdrop-filter: blur(6px);
     }
   </style>
 </head>
 <body>
-  <div id="wrap">
-    <canvas id="c" width="960" height="600"></canvas>
-  </div>
+  <div id="wrap"><canvas id="c" width="960" height="600"></canvas></div>
   <div class="hint" id="hint">
-    Move: Arrow Keys / WASD • Action: Space (Buffer) • Sprint: Shift • Mute: M • Start: Enter
+    Move: Arrow Keys / WASD • Buffer: Space • Sprint: Shift • Mute: M • Start/Restart: Enter
   </div>
 
 <script>
 (() => {
-  const canvas = document.getElementById("c");
-  const ctx = canvas.getContext("2d");
+  const c = document.getElementById("c");
+  const ctx = c.getContext("2d");
 
-  // --- Fixed resolution for crisp pixel feel
-  const W = canvas.width;
-  const H = canvas.height;
+  const W = c.width, H = c.height;
 
-  // --- Grid
-  const TILE = 24;                 // 24px tiles for chunky 8-bit look
+  // Tile/grid: smaller tiles = more detail without losing 8-bit vibe
+  const TILE = 20;
   const COLS = Math.floor(W / TILE);
   const ROWS = Math.floor(H / TILE);
 
-  // --- RNG
-  const rand = (a,b) => a + Math.random()*(b-a);
-  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand = (a,b)=>a+Math.random()*(b-a);
+  const irand = (a,b)=>Math.floor(rand(a,b+1));
+  const dist = (ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
 
-  // --- Input
+  // Input
   const keys = new Set();
-  window.addEventListener("keydown", (e) => {
-    const k = e.key.toLowerCase();
-    keys.add(k === " " ? "space" : k);
+  addEventListener("keydown", (e)=>{
+    const k = (e.key===" " ? "space" : e.key.toLowerCase());
+    keys.add(k);
     if (["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
   });
-  window.addEventListener("keyup", (e) => {
-    const k = e.key.toLowerCase();
-    keys.delete(k === " " ? "space" : k);
+  addEventListener("keyup", (e)=>{
+    const k = (e.key===" " ? "space" : e.key.toLowerCase());
+    keys.delete(k);
   });
 
-  // --- Audio (WebAudio chiptune)
-  let audioCtx = null;
-  let muted = false;
-
-  function ensureAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
-  function sfx(freq=440, dur=0.06, vol=0.05, type="square", slide=0) {
-    if (muted) return;
-    try {
+  // Audio: simple chiptune + crisp SFX
+  let audioCtx=null, muted=false;
+  function ensureAudio(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+  function sfx(freq=440, dur=0.06, vol=0.05, type="square", slide=0){
+    if(muted) return;
+    try{
       ensureAudio();
-      const t0 = audioCtx.currentTime;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = type;
+      const t0=audioCtx.currentTime;
+      const o=audioCtx.createOscillator();
+      const g=audioCtx.createGain();
+      o.type=type;
       o.frequency.setValueAtTime(freq, t0);
-      if (slide) o.frequency.linearRampToValueAtTime(freq + slide, t0 + dur);
+      if(slide) o.frequency.linearRampToValueAtTime(freq+slide, t0+dur);
       g.gain.setValueAtTime(vol, t0);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
       o.connect(g); g.connect(audioCtx.destination);
-      o.start(t0);
-      o.stop(t0 + dur);
-    } catch {}
+      o.start(t0); o.stop(t0+dur);
+    }catch{}
   }
-
-  // Simple looping “catchy” chiptune pattern
   const music = {
-    on: true,
+    bpm: 132,
     timer: 0,
     step: 0,
-    bpm: 140,
-    playing: false,
-    // minor-ish pattern, Santiago “inversion” mood but not dark
-    lead: [ 0, 2, 3, 7,  3, 2, 0, -5,  0, 2, 3, 10,  7, 3, 2, 0 ],
-    bass: [ -12, -12, -10, -10,  -12, -12, -15, -15,  -12, -12, -10, -10,  -12, -12, -15, -15 ],
+    // bright, “arcade city” loop
+    lead: [0,2,4,7,  4,2,0,-3,  0,2,4,9,  7,4,2,0],
+    bass: [-12,-12,-10,-10,  -12,-12,-15,-15,  -12,-12,-10,-10,  -12,-12,-15,-15],
   };
-
-  function noteHz(semiFromA4) {
-    return 440 * Math.pow(2, semiFromA4 / 12);
-  }
-
-  function playMusicStep() {
-    if (muted) return;
+  function noteHz(semi){ return 440*Math.pow(2, semi/12); }
+  function musicTick(){
+    if(muted) return;
     ensureAudio();
-
-    const scaleBase = -9; // center around C-ish
-    const st = music.step % music.lead.length;
-
-    // Lead
-    sfx(noteHz(scaleBase + music.lead[st]), 0.07, 0.028, "square", 0);
-
-    // Bass every 2 steps
-    if (st % 2 === 0) sfx(noteHz(scaleBase - 12 + music.bass[st]), 0.10, 0.032, "triangle", 0);
+    const base = -9; // around C
+    const st = music.step % 16;
+    sfx(noteHz(base + music.lead[st]), 0.07, 0.022, "square", 0);
+    if(st%2===0) sfx(noteHz(base - 12 + music.bass[st]), 0.10, 0.028, "triangle", 0);
   }
 
-  // --- Game state
-  const STATE = {
-    TITLE: "TITLE",
-    WEST: "WEST",
-    EAST: "EAST",
-    METRO: "METRO",
-    GAMEOVER: "GAMEOVER"
-  };
-
+  // Game state
+  const STATE = { TITLE:"TITLE", WEST:"WEST", EAST:"EAST", METRO:"METRO", GAMEOVER:"GAMEOVER" };
   let state = STATE.TITLE;
 
-  // Exposome, but simplified as health + regen
-  const player = {
-    x: 2, y: ROWS - 3,
-    px: 0, py: 0,
-    speed: 6.0,            // tiles per second baseline
-    sprintMul: 1.6,
-    hp: 100,
-    maxHp: 100,
-    dmgCooldown: 0,
-    regenTimer: 0,
-    buffer: { active: false, t: 0, dur: 2.2, radius: 2.2 },
-    bufferCooldown: 0,
-    coinsCarried: 0,
-    coinsBanked: 0,
-    score: 0,
+  // Tiles
+  // 0 floor, 1 wall
+  // 2 coin (small), 3 metro gate, 4 safe, 5 home bank, 6 wage, 7 friend, 8 tree
+  const T = { FLOOR:0, WALL:1, COIN:2, METRO:3, SAFE:4, HOME:5, WAGE:6, FRIEND:7, TREE:8 };
+
+  // Visual palette
+  const PAL = {
+    ui:"#E8F1FF",
+    uiDim:"rgba(232,241,255,0.75)",
+    westFloor:"#101827",
+    eastFloor:"#0D1C2C",
+    westWall:"#2A2F4A",
+    eastWall:"#1B3B66",
+    wallHi:"rgba(255,255,255,0.09)",
+    wallLo:"rgba(0,0,0,0.22)",
+    coin:"#CFE3FF",
+    wage:"#FFD66B",
+    friend:"#7CFFB5",
+    tree:"#66D6FF",
+    metroGlow:"rgba(127,177,255,0.30)",
+    safeGlow:"rgba(124,255,181,0.22)",
+    danger:"rgba(255,77,109,0.90)",
   };
 
-  // Level 1 tuning
+  // Texture helpers
+  const tex = {
+    floorW: document.createElement("canvas"),
+    floorE: document.createElement("canvas"),
+    wallW: document.createElement("canvas"),
+    wallE: document.createElement("canvas")
+  };
+  function mkTex(can, base, speck, w=64,h=64){
+    can.width=w; can.height=h;
+    const g = can.getContext("2d");
+    g.fillStyle = base; g.fillRect(0,0,w,h);
+    // speckles
+    for(let i=0;i<220;i++){
+      g.fillStyle = speck;
+      g.globalAlpha = 0.08 + Math.random()*0.12;
+      g.fillRect(irand(0,w-1), irand(0,h-1), 1, 1);
+    }
+    g.globalAlpha = 1;
+  }
+  mkTex(tex.floorW, PAL.westFloor, "#E8F1FF");
+  mkTex(tex.floorE, PAL.eastFloor, "#E8F1FF");
+  mkTex(tex.wallW,  PAL.westWall,  "#E8F1FF");
+  mkTex(tex.wallE,  PAL.eastWall,  "#E8F1FF");
+
+  function drawRounded(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  // Level 1 tuning (slower ghosts, more readable)
   const level = {
     number: 1,
-    westExposureMul: 1.25,
-    eastExposureMul: 0.95,
-    baseDps: 18,                 // damage per second while in contact
-    regenPerSec: 6.0,            // regen per second out of danger
-    safeRegenBoost: 2.0,         // safe zones regen multiplier
-    safeDamageReduce: 0.55,      // safe zones reduce damage
+    // contact damage per second (before multipliers)
+    baseDps: 12,
+    regenPerSec: 7.5,
+    // West is harsher
+    westMul: 1.25,
+    eastMul: 0.90,
+    // safe zones
+    safeRegenMul: 2.2,
+    safeDamageMul: 0.55,
+    // hit grace window
+    invulnAfterHit: 0.55,
+    // micro objective
+    bankGoal: 3,
   };
 
-  // --- Map encoding
-  // 0 empty path, 1 wall, 2 coin, 3 metro gate, 4 safe zone, 5 home bank, 6 wage cluster
-  function blankMap() {
-    const m = [];
-    for (let y=0;y<ROWS;y++) {
-      const row = [];
-      for (let x=0;x<COLS;x++) row.push(0);
-      m.push(row);
-    }
+  const player = {
+    x: 2, y: ROWS-3,
+    px: 0, py: 0,
+    hp: 100, maxHp: 100,
+    speed: 7.0,      // tiles/sec, player a bit responsive
+    sprintMul: 1.45,
+    dmgGrace: 0,
+    buffer: { active:false, t:0, dur:2.0, radius:2.7 },
+    bufferCd: 0,
+    coins: 0,
+    banked: 0,
+    bankStreak: 0,
+    score: 0,
+    // support aura from friends/family
+    support: { active:false, t:0, dur:6.0 }
+  };
+
+  // Hazards kept simple for now: ambient smog + canopy patches
+  const hazards = {
+    smog: [],     // {x,y,t}
+    canopy: [],   // {x,y,t}
+  };
+
+  // Metro transition
+  let fade = { active:false, t:0, dur:0.42, target:null };
+
+  // Build a more interesting maze: perfect maze + a couple rooms + loop breaks
+  function blankMap(){
+    const m=[];
+    for(let y=0;y<ROWS;y++){ const r=[]; for(let x=0;x<COLS;x++) r.push(T.WALL); m.push(r); }
     return m;
   }
 
-  function addBorderWalls(m) {
-    for (let x=0;x<COLS;x++) { m[0][x]=1; m[ROWS-1][x]=1; }
-    for (let y=0;y<ROWS;y++) { m[y][0]=1; m[y][COLS-1]=1; }
+  function carveMaze(m, seedBias=0.5){
+    // Maze on odd grid
+    const w = COLS, h = ROWS;
+    const visited = Array.from({length:h}, ()=>Array(w).fill(false));
+
+    function inb(x,y){ return x>0 && y>0 && x<w-1 && y<h-1; }
+    function neighbors(x,y){
+      const dirs = [[2,0],[-2,0],[0,2],[0,-2]];
+      const out=[];
+      for(const [dx,dy] of dirs){
+        const nx=x+dx, ny=y+dy;
+        if(inb(nx,ny) && !visited[ny][nx]) out.push([nx,ny,dx,dy]);
+      }
+      return out;
+    }
+
+    // start
+    let sx = 1; let sy = h-3;
+    if (sx%2===0) sx++; if (sy%2===0) sy--;
+    const stack=[[sx,sy]];
+    visited[sy][sx]=true;
+    m[sy][sx]=T.FLOOR;
+
+    while(stack.length){
+      const [x,y] = stack[stack.length-1];
+      const nbs = neighbors(x,y);
+      if(nbs.length===0){ stack.pop(); continue; }
+      // bias a bit for longer corridors
+      nbs.sort(()=>Math.random() - seedBias);
+      const [nx,ny,dx,dy] = nbs[0];
+      // carve wall between
+      m[y + dy/2][x + dx/2] = T.FLOOR;
+      m[ny][nx] = T.FLOOR;
+      visited[ny][nx]=true;
+      stack.push([nx,ny]);
+    }
+
+    // carve border floors where needed (keep walls on edges)
+    for(let x=1;x<w-1;x++){ m[1][x] = (m[1][x]===T.WALL && Math.random()<0.15) ? T.FLOOR : m[1][x]; }
   }
 
-  function carveMazeLike(m, seed=1) {
-    // Simple maze-ish blocks with corridors, Pac-Man vibe without being a clone
-    // Deterministic-ish structure for Level 1
-    const blocks = [
-      // [x,y,w,h]
-      [3, 3, 6, 2],
-      [12, 3, 6, 2],
-      [3, 7, 4, 3],
-      [9, 7, 10, 3],
-      [3, 12, 6, 2],
-      [12, 12, 6, 2],
-      [6, 16, 10, 2],
-    ];
-    for (const [bx,by,bw,bh] of blocks) {
-      for (let y=by;y<by+bh;y++) for (let x=bx;x<bx+bw;x++) m[y][x]=1;
-    }
-    // Add a few vertical pillars
-    for (let y=4;y<ROWS-4;y+=4) {
-      m[y][Math.floor(COLS*0.45)]=1;
-      m[y][Math.floor(COLS*0.55)]=1;
-    }
-  }
-
-  function sprinkleCoins(m, density=0.55) {
-    for (let y=1;y<ROWS-1;y++) {
-      for (let x=1;x<COLS-1;x++) {
-        if (m[y][x] !== 0) continue;
-        if (Math.random() < density) m[y][x] = 2;
+  function addRooms(m, rooms){
+    for(const r of rooms){
+      for(let y=r.y; y<r.y+r.h; y++){
+        for(let x=r.x; x<r.x+r.w; x++){
+          if(x>0 && y>0 && x<COLS-1 && y<ROWS-1) m[y][x]=T.FLOOR;
+        }
       }
     }
   }
 
-  function placeTile(m, x, y, t) {
-    if (x>=0 && x<COLS && y>=0 && y<ROWS) m[y][x]=t;
-  }
-
-  // Build two maps
-  const westMap = blankMap();
-  addBorderWalls(westMap);
-  carveMazeLike(westMap);
-  sprinkleCoins(westMap, 0.52);
-
-  // West features
-  const WEST_METRO = { x: COLS-3, y: 2 };
-  const WEST_SAFE  = { x: 3, y: 2 };
-  const WEST_HOME  = { x: 2, y: ROWS-3 };
-
-  placeTile(westMap, WEST_METRO.x, WEST_METRO.y, 3);
-  placeTile(westMap, WEST_SAFE.x,  WEST_SAFE.y,  4);
-  placeTile(westMap, WEST_HOME.x,  WEST_HOME.y,  5);
-
-  // Clear coins near key tiles
-  for (const p of [WEST_METRO, WEST_SAFE, WEST_HOME]) {
-    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
-      if (westMap[p.y+dy] && westMap[p.y+dy][p.x+dx] === 2) westMap[p.y+dy][p.x+dx] = 0;
+  function punchLoops(m, n=14){
+    // break some walls to create loops
+    for(let i=0;i<n;i++){
+      const x = irand(2, COLS-3);
+      const y = irand(2, ROWS-3);
+      if(m[y][x]===T.WALL){
+        const f = (m[y-1][x]===T.FLOOR) + (m[y+1][x]===T.FLOOR) + (m[y][x-1]===T.FLOOR) + (m[y][x+1]===T.FLOOR);
+        if(f>=2) m[y][x]=T.FLOOR;
+      }
     }
   }
 
-  const eastMap = blankMap();
-  addBorderWalls(eastMap);
-  // Slightly different block placement for east
-  carveMazeLike(eastMap);
-  // Open up a bit more in east
-  for (let y=1;y<ROWS-1;y++) eastMap[y][Math.floor(COLS*0.5)] = 0;
-  sprinkleCoins(eastMap, 0.45);
-
-  const EAST_METRO = { x: 2, y: 2 };
-  const EAST_SAFE  = { x: COLS-4, y: 2 };
-  const EAST_WAGE  = { x: COLS-4, y: ROWS-4 };
-
-  placeTile(eastMap, EAST_METRO.x, EAST_METRO.y, 3);
-  placeTile(eastMap, EAST_SAFE.x,  EAST_SAFE.y,  4);
-
-  // Wage cluster is “special coins” worth more, tile 6
-  for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
-    placeTile(eastMap, EAST_WAGE.x+dx, EAST_WAGE.y+dy, 6);
-  }
-
-  // Clear near metro/safe
-  for (const p of [EAST_METRO, EAST_SAFE]) {
-    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
-      if (eastMap[p.y+dy] && eastMap[p.y+dy][p.x+dx] === 2) eastMap[p.y+dy][p.x+dx] = 0;
+  function sprinkle(m, tile, count){
+    let tries = count*25;
+    while(count>0 && tries-->0){
+      const x=irand(1,COLS-2), y=irand(1,ROWS-2);
+      if(m[y][x]===T.FLOOR){ m[y][x]=tile; count--; }
     }
   }
 
-  function currentMap() {
-    return (state === STATE.WEST) ? westMap : eastMap;
+  function clearAround(m, x,y, r=1){
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      const ny=y+dy, nx=x+dx;
+      if(ny>=0 && ny<ROWS && nx>=0 && nx<COLS){
+        if(m[ny][nx]!==T.WALL) m[ny][nx]=T.FLOOR;
+      }
+    }
   }
 
-  function isWall(m, x, y) { return m[y] && m[y][x] === 1; }
-  function tileAt(m, x, y) { return (m[y] && m[y][x]) ?? 1; }
+  // Build WEST and EAST maps (two full screens)
+  const west = blankMap();
+  carveMaze(west, 0.58);
+  addRooms(west, [
+    {x: 2, y: ROWS-8, w: 8, h: 6}, // home-ish area
+    {x: COLS-12, y: 2, w: 10, h: 6}, // metro plaza
+  ]);
+  punchLoops(west, 18);
 
-  // --- Ghosts
-  function mkGhost(name, x, y, color, speed, behavior) {
-    return { name, x, y, px: x, py: y, vx: 0, vy: 0, color, speed, behavior, frightened: 0, lastTurn: 0 };
+  const east = blankMap();
+  carveMaze(east, 0.55);
+  addRooms(east, [
+    {x: 2, y: 2, w: 12, h: 6}, // metro plaza
+    {x: COLS-12, y: ROWS-8, w: 10, h: 6}, // wage district
+  ]);
+  punchLoops(east, 16);
+
+  // Key locations
+  const WEST_HOME = {x: 3, y: ROWS-5};
+  const WEST_METRO= {x: COLS-6, y: 4};
+  const WEST_SAFE = {x: 4, y: 4};
+
+  const EAST_METRO= {x: 5, y: 4};
+  const EAST_SAFE = {x: COLS-6, y: 4};
+  const EAST_WAGE = {x: COLS-6, y: ROWS-5};
+
+  function placeKeyTiles(){
+    west[WEST_HOME.y][WEST_HOME.x]=T.HOME;
+    west[WEST_METRO.y][WEST_METRO.x]=T.METRO;
+    west[WEST_SAFE.y][WEST_SAFE.x]=T.SAFE;
+
+    east[EAST_METRO.y][EAST_METRO.x]=T.METRO;
+    east[EAST_SAFE.y][EAST_SAFE.x]=T.SAFE;
+
+    // wage cluster
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      const x=EAST_WAGE.x+dx, y=EAST_WAGE.y+dy;
+      if(east[y] && east[y][x]!==T.WALL) east[y][x]=T.WAGE;
+    }
+
+    // clear around key tiles
+    for(const p of [WEST_HOME,WEST_METRO,WEST_SAFE]) clearAround(west, p.x,p.y, 1);
+    for(const p of [EAST_METRO,EAST_SAFE,EAST_WAGE]) clearAround(east, p.x,p.y, 1);
+  }
+  placeKeyTiles();
+
+  // Sprinkle extras: coins + friend + trees
+  // coins on floors only, avoid overwriting key tiles
+  function sprinkleCoins(m, density=0.35){
+    for(let y=1;y<ROWS-1;y++){
+      for(let x=1;x<COLS-1;x++){
+        if(m[y][x]!==T.FLOOR) continue;
+        if(Math.random()<density) m[y][x]=T.COIN;
+      }
+    }
+  }
+  sprinkleCoins(west, 0.40);
+  sprinkleCoins(east, 0.32);
+
+  // special pickups
+  sprinkle(west, T.FRIEND, 3);
+  sprinkle(east, T.FRIEND, 2);
+  sprinkle(west, T.TREE, 3);
+  sprinkle(east, T.TREE, 2);
+
+  // Helpers
+  function curMap(){ return (state===STATE.WEST) ? west : east; }
+  function tileAt(m,x,y){ return (m[y] && m[y][x]!==undefined) ? m[y][x] : T.WALL; }
+  function isWall(m,x,y){ return tileAt(m,x,y)===T.WALL; }
+  function canMove(m,x,y){ return x>=0 && y>=0 && x<COLS && y<ROWS && !isWall(m,x,y); }
+
+  // Ghosts: slower + more predictable, with CHASE/SCATTER cycle
+  function mkGhost(name, x,y, color, speed, mode){
+    return { name, x,y, px:x*TILE, py:y*TILE, vx:0, vy:0, color, speed, mode, acc:0, scatterT:0 };
   }
 
   const ghosts = [
-    // West-biased “smog” trail ghost
-    mkGhost("SMOG",  Math.floor(COLS*0.55), Math.floor(ROWS*0.55), "#7CFFB5", 4.6, "TRAIL"),
-    // Straight-burst “noise” ghost
-    mkGhost("SIREN", Math.floor(COLS*0.35), Math.floor(ROWS*0.30), "#FFD66B", 5.0, "BURST"),
-    // Heat ghost that “guards” hot zones
-    mkGhost("HEAT",  Math.floor(COLS*0.65), Math.floor(ROWS*0.30), "#FF6B87", 4.4, "GUARD"),
-    // Stress ghost that is more aggressive
-    mkGhost("STRESS",Math.floor(COLS*0.50), Math.floor(ROWS*0.40), "#7FB1FF", 5.4, "CHASE"),
+    mkGhost("SMOG",   Math.floor(COLS*0.55), Math.floor(ROWS*0.55), "#7CFFB5", 3.35, "CHASE"),
+    mkGhost("SIREN",  Math.floor(COLS*0.40), Math.floor(ROWS*0.35), "#FFD66B", 3.55, "CHASE"),
+    mkGhost("HEAT",   Math.floor(COLS*0.62), Math.floor(ROWS*0.28), "#FF6B87", 3.25, "CHASE"),
+    mkGhost("STRESS", Math.floor(COLS*0.50), Math.floor(ROWS*0.40), "#7FB1FF", 3.70, "CHASE"),
   ];
 
-  // Each screen has different ghost “feel” by tweaking multipliers
-  function ghostSpeedMul() {
-    if (state === STATE.WEST) return 1.08;
-    if (state === STATE.EAST) return 1.02;
-    return 0.0;
-  }
-
-  // Trail and heat tiles hazards
-  const hazards = {
-    smog: [],        // {x,y,t}
-    heat: [],        // {x,y,t}
-    noise: [],       // {x,y,r,t,phase}
-    stress: { active: false, t: 0, dur: 0, mul: 1.0 }
-  };
-
-  function addSmogTile(x,y) {
-    hazards.smog.push({ x, y, t: 2.6 });
-  }
-
-  function addHeatTile(x,y) {
-    hazards.heat.push({ x, y, t: 2.0 });
-  }
-
-  function spawnNoisePulse(x,y) {
-    hazards.noise.push({ x, y, r: 0.2, t: 0, dur: 0.8 });
-    sfx(180, 0.06, 0.045, "square", 40);
-  }
-
-  function triggerStressSurge() {
-    hazards.stress.active = true;
-    hazards.stress.t = 0;
-    hazards.stress.dur = 3.8;
-    hazards.stress.mul = 1.35;
-    sfx(120, 0.12, 0.05, "square", -40);
-  }
-
-  function resetRun() {
-    player.x = WEST_HOME.x;
-    player.y = WEST_HOME.y;
-    player.hp = 100;
-    player.coinsCarried = 0;
-    player.coinsBanked = 0;
-    player.score = 0;
-    player.buffer.active = false;
-    player.buffer.t = 0;
-    player.bufferCooldown = 0;
-    hazards.smog = [];
-    hazards.heat = [];
-    hazards.noise = [];
-    hazards.stress.active = false;
-
-    // Reset coins by rebuilding maps quickly
-    // (Simple approach for prototype: leave as-is, but you can reload on reset if you want)
-    for (const g of ghosts) {
-      g.x = Math.floor(COLS*0.50);
-      g.y = Math.floor(ROWS*0.45);
-      g.vx = 0; g.vy = 0;
-      g.lastTurn = 0;
+  function resetGhosts(){
+    for(const g of ghosts){
+      g.x = Math.floor(COLS*0.52);
+      g.y = Math.floor(ROWS*0.44);
+      g.vx=0; g.vy=0; g.acc=0;
+      g.mode="CHASE";
+      g.scatterT=0;
     }
-
-    state = STATE.WEST;
   }
 
-  // --- Visual theme helpers
-  const PAL = {
-    ui: "#E8F1FF",
-    uiDim: "rgba(232,241,255,0.72)",
-    bg: "#070B10",
-    westGround: "#1B1C2A",
-    eastGround: "#121B2B",
-    wallWest: "#2B2D4A",
-    wallEast: "#1F335C",
-    smog: "rgba(180,255,210,0.22)",
-    heat: "rgba(255,107,135,0.18)",
-    noise: "rgba(255,214,107,0.20)",
-    safe: "rgba(127,255,213,0.24)",
-    metro: "rgba(127,177,255,0.26)",
-    home: "rgba(241,246,255,0.16)",
-    wage: "rgba(255,214,107,0.95)",
-    coin: "rgba(232,241,255,0.80)",
-  };
+  // Pac-Man-ish global rhythm: 6s chase, 3s scatter
+  const ghostRhythm = { t:0, chase:6.0, scatter:3.0, phase:"CHASE" };
 
-  function px(x){ return x*TILE; }
-  function drawRounded(x,y,w,h,r) {
-    ctx.beginPath();
-    ctx.moveTo(x+r, y);
-    ctx.arcTo(x+w, y, x+w, y+h, r);
-    ctx.arcTo(x+w, y+h, x, y+h, r);
-    ctx.arcTo(x, y+h, x, y, r);
-    ctx.arcTo(x, y, x+w, y, r);
-    ctx.closePath();
+  function ghostTargets(g){
+    // scatter corners differ per ghost
+    const corners = [
+      {x:1,y:1},
+      {x:COLS-2,y:1},
+      {x:1,y:ROWS-2},
+      {x:COLS-2,y:ROWS-2},
+    ];
+    const idx = (g.name==="SMOG") ? 0 : (g.name==="SIREN") ? 1 : (g.name==="HEAT") ? 2 : 3;
+    if(ghostRhythm.phase==="SCATTER") return corners[idx];
+    // chase: slight personality offsets
+    if(g.name==="SMOG") return {x: player.x, y: player.y};
+    if(g.name==="SIREN") return {x: clamp(player.x + (player.x%2?2:-2),1,COLS-2), y: player.y};
+    if(g.name==="HEAT") return (state===STATE.EAST) ? {x: EAST_WAGE.x, y: EAST_WAGE.y} : {x: player.x, y: player.y};
+    return {x: player.x, y: player.y}; // STRESS
   }
 
-  // Subtle scanline overlay for “cabinet” feel
-  function drawScanlines() {
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    for (let y=0;y<H;y+=3) {
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(0, y, W, 1);
+  function chooseDir(g, m){
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    const tgt = ghostTargets(g);
+
+    // At intersections, pick best direction by Manhattan distance
+    let best=null, bestScore=1e9;
+    for(const d of dirs){
+      const nx=g.x+d.dx, ny=g.y+d.dy;
+      if(!canMove(m,nx,ny)) continue;
+
+      // discourage immediate reversal
+      if(d.dx===-g.vx && d.dy===-g.vy && Math.random()<0.85) continue;
+
+      const md = Math.abs(tgt.x-nx)+Math.abs(tgt.y-ny);
+      let score = md;
+
+      // personality seasoning
+      if(g.name==="SIREN"){
+        // prefers straight lines
+        score += (d.dx===g.vx && d.dy===g.vy) ? -0.35 : 0.10;
+      }
+      if(g.name==="STRESS"){
+        // a bit more aggressive but still readable
+        score *= 0.92;
+      }
+      // tiny randomness to avoid identical paths
+      score += rand(0,0.18);
+
+      if(score<bestScore){ bestScore=score; best=d; }
     }
-    ctx.restore();
+    // fallback allow reversal if stuck
+    if(!best){
+      for(const d of dirs){
+        const nx=g.x+d.dx, ny=g.y+d.dy;
+        if(canMove(m,nx,ny)){ best=d; break; }
+      }
+    }
+    return best || {dx:0,dy:0};
   }
 
-  // --- Art: backdrop for each side
-  function drawBackdrop(side) {
-    // Sky + Andes
+  // Backdrop: Santiago vibe, two moods
+  let now=0;
+  function drawBackdrop(side){
     const sky = ctx.createLinearGradient(0,0,0,H);
-    if (side === "WEST") {
-      sky.addColorStop(0, "#1A3359");
-      sky.addColorStop(0.55, "#0B1A2E");
-      sky.addColorStop(1, "#071018");
+    if(side==="WEST"){
+      sky.addColorStop(0,"#20406B");
+      sky.addColorStop(0.55,"#0B1A2E");
+      sky.addColorStop(1,"#060A10");
     } else {
-      sky.addColorStop(0, "#163C66");
-      sky.addColorStop(0.55, "#0A1F3A");
-      sky.addColorStop(1, "#071018");
+      sky.addColorStop(0,"#1E4C7D");
+      sky.addColorStop(0.55,"#0A1F3A");
+      sky.addColorStop(1,"#060A10");
     }
-    ctx.fillStyle = sky;
-    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
 
     // Andes silhouette
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillStyle="rgba(0,0,0,0.34)";
     ctx.beginPath();
-    ctx.moveTo(0, 110);
+    ctx.moveTo(0, 120);
     const peaks = [
-      [80, 70],[140, 92],[220, 66],[320, 96],[420, 62],
-      [520, 98],[630, 64],[730, 100],[860, 72],[960, 112]
+      [70, 80],[140, 110],[220, 78],[320, 115],[420, 74],
+      [520, 118],[640, 76],[740, 120],[860, 88],[960, 130]
     ];
-    for (const [x,y] of peaks) ctx.lineTo(x, y);
-    ctx.lineTo(W, 140);
-    ctx.lineTo(0, 140);
-    ctx.closePath();
+    for(const [x,y] of peaks) ctx.lineTo(x,y);
+    ctx.lineTo(W, 160); ctx.lineTo(0,160); ctx.closePath();
     ctx.fill();
 
-    // Skyline hints
-    ctx.fillStyle = (side === "WEST") ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.22)";
-    const baseY = 150;
-    for (let i=0;i<44;i++){
-      const bw = Math.floor(rand(14, 30));
-      const bh = Math.floor(rand(18, side==="WEST" ? 70 : 110));
-      const bx = Math.floor(rand(-20, W+20));
+    // Skyline (east has taller, cleaner shapes)
+    const baseY = 170;
+    const count = 52;
+    for(let i=0;i<count;i++){
+      const bw = irand(10, 26);
+      const bh = irand(18, side==="WEST" ? 70 : 125);
+      const bx = irand(-10, W+10);
+      ctx.fillStyle = side==="WEST" ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.20)";
       ctx.fillRect(bx, baseY-bh, bw, bh);
+      if(side==="EAST" && Math.random()<0.22){
+        ctx.fillStyle="rgba(232,241,255,0.07)";
+        ctx.fillRect(bx+2, baseY-bh+6, 2, bh-10);
+      }
     }
 
-    // Smog layer, heavier on west
-    const smogStrength = (side === "WEST") ? 0.22 : 0.12;
+    // Animated smog band (heavier west)
+    const smogA = side==="WEST" ? 0.20 : 0.10;
     ctx.save();
-    ctx.globalAlpha = smogStrength;
-    ctx.fillStyle = "#D7FFD9";
-    ctx.fillRect(0, 120, W, 90);
-    ctx.globalAlpha = smogStrength * 0.65;
-    for (let i=0;i<50;i++){
+    ctx.globalAlpha = smogA;
+    ctx.fillStyle="#D7FFD9";
+    ctx.fillRect(0, 130, W, 80);
+    ctx.globalAlpha = smogA*0.75;
+    for(let i=0;i<44;i++){
+      const x = (i*28 + (now*24))%W;
+      const y = 140 + (i%6)*8;
       ctx.beginPath();
-      ctx.arc(rand(0,W), rand(118, 208), rand(18, 70), 0, Math.PI*2);
+      ctx.arc(x, y, 22 + (i%5)*7, 0, Math.PI*2);
       ctx.fill();
     }
     ctx.restore();
   }
 
-  // --- Drawing tiles
-  function drawTile(m, x, y) {
-    const t = m[y][x];
-    const gx = x*TILE;
-    const gy = y*TILE;
+  function drawTile(m,x,y){
+    const t = tileAt(m,x,y);
+    const gx=x*TILE, gy=y*TILE;
 
-    // ground
-    ctx.fillStyle = (state === STATE.WEST) ? PAL.westGround : PAL.eastGround;
-    ctx.fillRect(gx, gy, TILE, TILE);
+    // textured floor
+    const floorTex = (state===STATE.WEST) ? tex.floorW : tex.floorE;
+    ctx.drawImage(floorTex, gx%64, gy%64, TILE, TILE, gx, gy, TILE, TILE);
 
-    if (t === 1) {
-      // wall with bevel
-      ctx.fillStyle = (state === STATE.WEST) ? PAL.wallWest : PAL.wallEast;
-      ctx.fillRect(gx, gy, TILE, TILE);
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      ctx.fillRect(gx+2, gy+2, TILE-4, 2);
+    if(t===T.WALL){
+      const wallTex = (state===STATE.WEST) ? tex.wallW : tex.wallE;
+      ctx.drawImage(wallTex, gx%64, gy%64, TILE, TILE, gx, gy, TILE, TILE);
+      // bevel
+      ctx.fillStyle = PAL.wallHi; ctx.fillRect(gx+2, gy+2, TILE-4, 2);
       ctx.fillRect(gx+2, gy+2, 2, TILE-4);
-      ctx.fillStyle = "rgba(0,0,0,0.20)";
-      ctx.fillRect(gx+2, gy+TILE-4, TILE-4, 2);
+      ctx.fillStyle = PAL.wallLo; ctx.fillRect(gx+2, gy+TILE-4, TILE-4, 2);
       ctx.fillRect(gx+TILE-4, gy+2, 2, TILE-4);
       return;
     }
 
-    if (t === 3) {
-      // metro gate
+    if(t===T.COIN){
       ctx.save();
-      ctx.fillStyle = "rgba(127,177,255,0.22)";
-      ctx.fillRect(gx, gy, TILE, TILE);
-      ctx.fillStyle = "rgba(127,177,255,0.85)";
-      ctx.fillRect(gx+6, gy+4, TILE-12, TILE-8);
-      ctx.fillStyle = "rgba(0,0,0,0.22)";
-      ctx.fillRect(gx+8, gy+7, TILE-16, TILE-14);
-      ctx.restore();
-      return;
-    }
-
-    if (t === 4) {
-      // safe place
-      ctx.save();
-      ctx.fillStyle = "rgba(127,255,213,0.18)";
-      ctx.fillRect(gx, gy, TILE, TILE);
-      ctx.fillStyle = "rgba(127,255,213,0.72)";
+      ctx.globalAlpha=0.9;
+      ctx.fillStyle=PAL.coin;
       ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+TILE/2, 7, 0, Math.PI*2);
+      ctx.arc(gx+TILE/2, gy+TILE/2, 2.3, 0, Math.PI*2);
       ctx.fill();
       ctx.restore();
       return;
     }
 
-    if (t === 5) {
-      // home bank
+    if(t===T.WAGE){
       ctx.save();
-      ctx.fillStyle = "rgba(241,246,255,0.10)";
-      ctx.fillRect(gx, gy, TILE, TILE);
-      ctx.fillStyle = "rgba(241,246,255,0.85)";
-      ctx.fillRect(gx+7, gy+9, TILE-14, TILE-12);
-      ctx.fillStyle = "rgba(0,0,0,0.22)";
-      ctx.fillRect(gx+9, gy+11, TILE-18, TILE-16);
-      ctx.restore();
-      return;
-    }
-
-    if (t === 2) {
-      // coin (small dot)
-      ctx.fillStyle = "rgba(232,241,255,0.65)";
-      ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+TILE/2, 2.2, 0, Math.PI*2);
-      ctx.fill();
-      return;
-    }
-
-    if (t === 6) {
-      // wage token (bigger)
-      ctx.save();
-      ctx.fillStyle = "rgba(255,214,107,0.20)";
-      ctx.fillRect(gx, gy, TILE, TILE);
-      ctx.fillStyle = "rgba(255,214,107,0.95)";
+      ctx.globalAlpha=0.15;
+      ctx.fillStyle=PAL.wage;
+      ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
+      ctx.globalAlpha=0.95;
+      ctx.fillStyle=PAL.wage;
       ctx.beginPath();
       ctx.arc(gx+TILE/2, gy+TILE/2, 5.2, 0, Math.PI*2);
       ctx.fill();
-      ctx.fillStyle = "rgba(0,0,0,0.20)";
+      ctx.globalAlpha=0.22;
+      ctx.fillStyle="#000";
       ctx.fillRect(gx+TILE/2-1, gy+TILE/2-3, 2, 6);
       ctx.restore();
       return;
     }
-  }
 
-  function drawMap() {
-    const m = currentMap();
-    for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++) drawTile(m, x, y);
-  }
-
-  // --- Draw hazards
-  function drawHazards() {
-    // Smog tiles
-    ctx.save();
-    for (const s of hazards.smog) {
-      ctx.globalAlpha = clamp(s.t / 2.6, 0, 1) * 0.22;
-      ctx.fillStyle = "#D7FFD9";
-      ctx.beginPath();
-      ctx.arc(px(s.x)+TILE/2, px(s.y)+TILE/2, 15, 0, Math.PI*2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Heat tiles
-    ctx.save();
-    for (const h of hazards.heat) {
-      ctx.globalAlpha = clamp(h.t / 2.0, 0, 1) * 0.20;
-      ctx.fillStyle = "#FF6B87";
-      ctx.fillRect(px(h.x)+3, px(h.y)+3, TILE-6, TILE-6);
-    }
-    ctx.restore();
-
-    // Noise pulses
-    ctx.save();
-    for (const n of hazards.noise) {
-      const prog = n.t / n.dur;
-      ctx.globalAlpha = (1 - prog) * 0.20;
-      ctx.strokeStyle = "#FFD66B";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(px(n.x)+TILE/2, px(n.y)+TILE/2, n.r * TILE * 3.2, 0, Math.PI*2);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Stress surge vignette
-    if (hazards.stress.active) {
-      const prog = hazards.stress.t / hazards.stress.dur;
-      const a = 0.10 + 0.18 * Math.sin(prog * Math.PI * 6);
+    if(t===T.FRIEND){
+      // friend/family: heart-like pixel charm
       ctx.save();
-      ctx.globalAlpha = clamp(a, 0, 0.26);
-      ctx.fillStyle = "#FF2D55";
-      ctx.fillRect(0,0,W,H);
+      ctx.globalAlpha=0.22;
+      ctx.fillStyle=PAL.friend;
+      ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
+      ctx.globalAlpha=0.95;
+      ctx.fillStyle=PAL.friend;
+      const pxl = (xx,yy)=>ctx.fillRect(gx+xx, gy+yy, 2, 2);
+      // tiny heart
+      pxl(7,7); pxl(9,7); pxl(11,7); pxl(13,7);
+      pxl(6,9); pxl(8,9); pxl(12,9); pxl(14,9);
+      pxl(7,11); pxl(9,11); pxl(11,11); pxl(13,11);
+      pxl(8,13); pxl(10,13); pxl(12,13);
+      pxl(10,15);
       ctx.restore();
+      return;
+    }
+
+    if(t===T.TREE){
+      ctx.save();
+      ctx.globalAlpha=0.20;
+      ctx.fillStyle=PAL.tree;
+      ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
+      ctx.globalAlpha=0.92;
+      ctx.fillStyle=PAL.tree;
+      // trunk
+      ctx.fillRect(gx+TILE/2-1, gy+11, 2, 6);
+      // canopy
+      ctx.beginPath();
+      ctx.arc(gx+TILE/2, gy+10, 5.8, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if(t===T.SAFE){
+      ctx.save();
+      ctx.globalAlpha=0.16;
+      ctx.fillStyle=PAL.friend;
+      ctx.fillRect(gx,gy,TILE,TILE);
+      ctx.globalAlpha=0.85;
+      ctx.strokeStyle="rgba(124,255,181,0.9)";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(gx+TILE/2, gy+TILE/2, 7, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.globalAlpha=0.55;
+      ctx.fillStyle="rgba(124,255,181,0.25)";
+      ctx.beginPath();
+      ctx.arc(gx+TILE/2, gy+TILE/2, 6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if(t===T.HOME){
+      ctx.save();
+      ctx.globalAlpha=0.14;
+      ctx.fillStyle="#E8F1FF";
+      ctx.fillRect(gx,gy,TILE,TILE);
+      ctx.globalAlpha=0.9;
+      ctx.fillStyle="#E8F1FF";
+      // little house icon
+      ctx.fillRect(gx+6, gy+11, 8, 6);
+      ctx.beginPath();
+      ctx.moveTo(gx+6,gy+11);
+      ctx.lineTo(gx+10,gy+7);
+      ctx.lineTo(gx+14,gy+11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if(t===T.METRO){
+      // Metro entrance is drawn bigger in overlay pass (so here just mark tile)
+      ctx.save();
+      ctx.globalAlpha=0.10;
+      ctx.fillStyle="#7FB1FF";
+      ctx.fillRect(gx,gy,TILE,TILE);
+      ctx.restore();
+      return;
     }
   }
 
-  // --- Player drawing
-  function drawPlayer() {
-    const cx = player.px;
-    const cy = player.py;
+  function drawMap(){
+    const m=curMap();
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++) drawTile(m,x,y);
+    }
+  }
 
-    // Shadow
+  function drawMetroEntrance(px,py, labelSide){
+    // Draw a big “METRO” sign + portal glow centered on tile
+    const cx = px + TILE/2;
+    const cy = py + TILE/2;
+
+    // glow
     ctx.save();
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = "#000";
+    const pulse = 0.55 + 0.45*Math.sin(now*4.2);
+    ctx.globalAlpha = 0.18 + 0.10*pulse;
+    ctx.fillStyle = "rgba(127,177,255,0.55)";
     ctx.beginPath();
-    ctx.ellipse(cx+TILE/2, cy+TILE/2+9, 10, 4, 0, 0, Math.PI*2);
+    ctx.arc(cx, cy, 18, 0, Math.PI*2);
     ctx.fill();
-    ctx.restore();
 
-    // Body (neural pulse)
-    ctx.save();
-    const pulse = 0.75 + 0.25*Math.sin(perfNow*0.012);
+    // station body
     ctx.globalAlpha = 1;
-    ctx.fillStyle = `rgba(59,228,197,${0.92})`;
-    drawRounded(cx+6, cy+6, TILE-12, TILE-12, 6);
+    ctx.fillStyle = "rgba(7,12,18,0.85)";
+    drawRounded(px-10, py-8, TILE+20, TILE+18, 10);
     ctx.fill();
-
-    // Inner highlight
-    ctx.globalAlpha = 0.22 + 0.12*pulse;
-    ctx.fillStyle = "#FFFFFF";
-    drawRounded(cx+9, cy+8, TILE-18, TILE-18, 6);
-    ctx.fill();
-
-    // Little “synapse” spark
-    ctx.globalAlpha = 0.75;
-    ctx.fillStyle = "#E8F1FF";
-    ctx.fillRect(cx+TILE/2-1, cy+3, 2, 4);
-    ctx.fillRect(cx+TILE/2-1, cy+TILE-7, 2, 4);
-    ctx.restore();
-
-    // Buffer ring
-    if (player.buffer.active) {
-      const r = player.buffer.radius * TILE;
-      ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = "#3BE4C5";
-      ctx.beginPath();
-      ctx.arc(cx+TILE/2, cy+TILE/2, r, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = "#E8F1FF";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx+TILE/2, cy+TILE/2, r, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // --- Ghost drawing
-  function drawGhost(g) {
-    const cx = g.px;
-    const cy = g.py;
-
-    ctx.save();
-    // Shadow
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.ellipse(cx+TILE/2, cy+TILE/2+9, 10, 4, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // Body
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = g.color;
-
-    // 8-bit ghost body shape
-    const x = cx+5, y = cy+6, w = TILE-10, h = TILE-10;
-    drawRounded(x, y, w, h-3, 7);
-    ctx.fill();
-    // Wavy bottom
-    ctx.fillRect(x, y+h-6, w, 6);
-    ctx.clearRect(x+2, y+h-2, 3, 2);
-    ctx.clearRect(x+8, y+h-2, 3, 2);
-    ctx.clearRect(x+14, y+h-2, 3, 2);
-
-    // Eyes
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.beginPath(); ctx.arc(cx+TILE/2-5, cy+TILE/2-2, 3, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx+TILE/2+5, cy+TILE/2-2, 3, 0, Math.PI*2); ctx.fill();
-
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = "#E8F1FF";
-    ctx.beginPath(); ctx.arc(cx+TILE/2-5, cy+TILE/2-2, 1.5, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx+TILE/2+5, cy+TILE/2-2, 1.5, 0, Math.PI*2); ctx.fill();
-
-    ctx.restore();
-  }
-
-  // --- HUD
-  function drawHUD() {
-    ctx.save();
-    ctx.fillStyle = "rgba(5,10,16,0.62)";
-    ctx.fillRect(0,0,W,52);
-
-    ctx.fillStyle = PAL.ui;
-    ctx.font = "16px ui-monospace, monospace";
-    ctx.textBaseline = "middle";
-    const side = (state === STATE.WEST) ? "WEST" : (state === STATE.EAST) ? "EAST" : state;
-    ctx.fillText(`METRO DIVIDE  |  LEVEL ${level.number}  |  ${side}`, 14, 26);
-
-    // Health bar
-    const hbX = 420, hbY = 16, hbW = 220, hbH = 20;
-    ctx.strokeStyle = "rgba(232,241,255,0.20)";
+    ctx.strokeStyle = "rgba(127,177,255,0.55)";
     ctx.lineWidth = 2;
-    drawRounded(hbX, hbY, hbW, hbH, 8);
     ctx.stroke();
 
-    const hpPct = clamp(player.hp / player.maxHp, 0, 1);
-    ctx.fillStyle = hpPct > 0.6 ? "rgba(59,228,197,0.95)" : hpPct > 0.3 ? "rgba(255,214,107,0.95)" : "rgba(255,77,109,0.95)";
-    drawRounded(hbX+2, hbY+2, (hbW-4)*hpPct, hbH-4, 7);
+    // sign plate
+    ctx.fillStyle = "rgba(127,177,255,0.22)";
+    drawRounded(px-6, py-6, TILE+12, 16, 8);
     ctx.fill();
 
-    ctx.fillStyle = PAL.uiDim;
-    ctx.font = "13px ui-monospace, monospace";
-    ctx.fillText("Allostatic Load", hbX+6, hbY+hbH+12);
+    ctx.fillStyle = "#E8F1FF";
+    ctx.font = "bold 11px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("METRO", cx, py+2);
 
-    // Coins
-    ctx.fillStyle = PAL.ui;
-    ctx.font = "14px ui-monospace, monospace";
-    ctx.fillText(`Carried: ${player.coinsCarried}`, 680, 19);
-    ctx.fillStyle = PAL.uiDim;
-    ctx.fillText(`Banked: ${player.coinsBanked}`, 680, 35);
-
-    // Buffer cooldown
-    const cd = Math.max(0, player.bufferCooldown);
-    ctx.fillStyle = PAL.uiDim;
-    ctx.fillText(`Buffer CD: ${cd.toFixed(1)}s`, 820, 26);
+    // arrow indicator
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = "rgba(255,214,107,0.95)";
+    const dir = labelSide;
+    ctx.beginPath();
+    if(dir==="TO_EAST"){
+      ctx.moveTo(px+TILE+8, cy);
+      ctx.lineTo(px+TILE+2, cy-5);
+      ctx.lineTo(px+TILE+2, cy+5);
+    } else {
+      ctx.moveTo(px-8, cy);
+      ctx.lineTo(px-2, cy-5);
+      ctx.lineTo(px-2, cy+5);
+    }
+    ctx.closePath();
+    ctx.fill();
 
     ctx.restore();
   }
 
-  // --- Tile-based collision and movement
-  function canMoveTo(m, nx, ny) {
-    if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) return false;
-    return !isWall(m, nx, ny);
+  function drawHazards(){
+    // smog puffs as soft circles on tiles
+    ctx.save();
+    for(const s of hazards.smog){
+      ctx.globalAlpha = clamp(s.t/2.6,0,1) * 0.18;
+      ctx.fillStyle="#D7FFD9";
+      ctx.beginPath();
+      ctx.arc(s.x*TILE+TILE/2, s.y*TILE+TILE/2, 14, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // canopy patches
+    for(const g of hazards.canopy){
+      ctx.globalAlpha = clamp(g.t/3.2,0,1) * 0.18;
+      ctx.fillStyle="#7CFFB5";
+      ctx.beginPath();
+      ctx.arc(g.x*TILE+TILE/2, g.y*TILE+TILE/2, 16, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha *= 1.2;
+      ctx.strokeStyle="rgba(232,241,255,0.35)";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(g.x*TILE+TILE/2, g.y*TILE+TILE/2, 16, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
-  function dist(ax,ay,bx,by) {
-    const dx=ax-bx, dy=ay-by;
-    return Math.sqrt(dx*dx + dy*dy);
+  function drawPlayer(){
+    const x=player.px, y=player.py;
+    ctx.save();
+
+    // shadow
+    ctx.globalAlpha=0.22;
+    ctx.fillStyle="#000";
+    ctx.beginPath();
+    ctx.ellipse(x+TILE/2, y+TILE/2+9, 10, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // body
+    const pulse = 0.72 + 0.28*Math.sin(now*8);
+    ctx.globalAlpha=0.92;
+    ctx.fillStyle="rgba(59,228,197,0.95)";
+    drawRounded(x+5, y+5, TILE-10, TILE-10, 7);
+    ctx.fill();
+
+    ctx.globalAlpha=0.20 + 0.12*pulse;
+    ctx.fillStyle="#FFFFFF";
+    drawRounded(x+8, y+7, TILE-16, TILE-16, 7);
+    ctx.fill();
+
+    // support aura (friends/family)
+    if(player.support.active){
+      const r = 32 + 6*Math.sin(now*5);
+      ctx.globalAlpha=0.14;
+      ctx.fillStyle="#7CFFB5";
+      ctx.beginPath();
+      ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha=0.22;
+      ctx.strokeStyle="rgba(232,241,255,0.35)";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    // buffer
+    if(player.buffer.active){
+      const r = player.buffer.radius*TILE;
+      ctx.globalAlpha=0.12;
+      ctx.fillStyle="#66D6FF";
+      ctx.beginPath(); ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.25;
+      ctx.strokeStyle="rgba(232,241,255,0.40)";
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // invuln blink
+    if(player.dmgGrace>0){
+      ctx.globalAlpha = 0.35 + 0.35*Math.sin(now*26);
+      ctx.fillStyle="#E8F1FF";
+      ctx.fillRect(x+TILE/2-1, y+2, 2, 5);
+    }
+
+    ctx.restore();
   }
 
-  // Ghost path choice: simple greedy with personality
-  function ghostChooseDir(g, m) {
-    const dirs = [
-      {dx: 1, dy: 0},
-      {dx:-1, dy: 0},
-      {dx: 0, dy: 1},
-      {dx: 0, dy:-1},
-    ];
+  function drawGhost(g){
+    const x=g.px, y=g.py;
+    ctx.save();
 
-    // Block immediate reversal sometimes for more “arcade” feel
-    const reverseBias = 0.12;
+    // shadow
+    ctx.globalAlpha=0.22;
+    ctx.fillStyle="#000";
+    ctx.beginPath();
+    ctx.ellipse(x+TILE/2, y+TILE/2+9, 10, 4, 0, 0, Math.PI*2);
+    ctx.fill();
 
-    let best = null;
-    let bestScore = 1e9;
+    // body
+    ctx.globalAlpha=0.95;
+    ctx.fillStyle=g.color;
 
-    for (const d of dirs) {
-      const nx = g.x + d.dx;
-      const ny = g.y + d.dy;
-      if (!canMoveTo(m, nx, ny)) continue;
+    // 8-bit ghost shape with nicer face
+    const bx=x+4, by=y+5, bw=TILE-8, bh=TILE-8;
+    drawRounded(bx,by,bw,bh-2,8);
+    ctx.fill();
+    ctx.fillRect(bx, by+bh-6, bw, 6);
+    // little “feet” notches
+    ctx.globalCompositeOperation="destination-out";
+    ctx.fillRect(bx+2, by+bh-2, 3, 2);
+    ctx.fillRect(bx+8, by+bh-2, 3, 2);
+    ctx.fillRect(bx+14, by+bh-2, 3, 2);
+    ctx.globalCompositeOperation="source-over";
 
-      const toPlayer = dist(nx, ny, player.x, player.y);
+    // eyes
+    ctx.globalAlpha=0.9;
+    ctx.fillStyle="rgba(0,0,0,0.28)";
+    ctx.beginPath(); ctx.arc(x+TILE/2-5, y+TILE/2-1, 3.0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+TILE/2+5, y+TILE/2-1, 3.0, 0, Math.PI*2); ctx.fill();
 
-      let score = toPlayer;
+    // pupils toward movement
+    const pxo = clamp(g.vx*1.0, -1, 1);
+    const pyo = clamp(g.vy*1.0, -1, 1);
+    ctx.globalAlpha=0.85;
+    ctx.fillStyle="#E8F1FF";
+    ctx.beginPath(); ctx.arc(x+TILE/2-5+pxo, y+TILE/2-1+pyo, 1.4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+TILE/2+5+pxo, y+TILE/2-1+pyo, 1.4, 0, Math.PI*2); ctx.fill();
 
-      if (g.behavior === "TRAIL") {
-        // Smog ghost favors staying near the player but also leaves trail behind
-        score = toPlayer * 0.95 + rand(0, 0.35);
-      } else if (g.behavior === "BURST") {
-        // Siren likes long corridors: prefer dirs that keep moving straight
-        const straightBonus = (d.dx === g.vx && d.dy === g.vy) ? -0.25 : 0.0;
-        score = toPlayer + straightBonus + rand(0, 0.25);
-      } else if (g.behavior === "GUARD") {
-        // Heat ghost orbits wage area on east, otherwise semi-chase
-        const target = (state === STATE.EAST) ? EAST_WAGE : {x: Math.floor(COLS*0.5), y: Math.floor(ROWS*0.5)};
-        const toTarget = dist(nx, ny, target.x, target.y);
-        score = (toTarget * 0.85) + (toPlayer * 0.35) + rand(0, 0.35);
-      } else if (g.behavior === "CHASE") {
-        // Stress ghost is more direct
-        score = toPlayer * 0.80 + rand(0, 0.18);
+    ctx.restore();
+  }
+
+  function drawScanlines(){
+    ctx.save();
+    ctx.globalAlpha=0.16;
+    for(let y=0;y<H;y+=3){
+      ctx.fillStyle="rgba(0,0,0,0.35)";
+      ctx.fillRect(0,y,W,1);
+    }
+    ctx.restore();
+  }
+
+  function drawHUD(){
+    ctx.save();
+    ctx.fillStyle="rgba(6,10,16,0.62)";
+    ctx.fillRect(0,0,W,56);
+
+    ctx.fillStyle=PAL.ui;
+    ctx.font="16px ui-monospace, monospace";
+    ctx.textBaseline="middle";
+    const side = (state===STATE.WEST) ? "WEST" : "EAST";
+    ctx.fillText(`SANTIAGO METRO ESCAPE  |  LEVEL ${level.number}  |  ${side}`, 14, 18);
+
+    // objective hint
+    ctx.fillStyle=PAL.uiDim;
+    ctx.font="13px ui-monospace, monospace";
+    ctx.fillText(`Goal: Bank ${level.bankGoal} Wages (Banked this run: ${player.banked})`, 14, 40);
+
+    // health bar
+    const hbX=520, hbY=14, hbW=220, hbH=18;
+    ctx.strokeStyle="rgba(232,241,255,0.20)";
+    ctx.lineWidth=2;
+    drawRounded(hbX,hbY,hbW,hbH,9);
+    ctx.stroke();
+
+    const p = clamp(player.hp/player.maxHp,0,1);
+    ctx.fillStyle = p>0.6 ? "rgba(59,228,197,0.95)" : p>0.3 ? "rgba(255,214,107,0.95)" : "rgba(255,77,109,0.95)";
+    drawRounded(hbX+2,hbY+2,(hbW-4)*p,hbH-4,8);
+    ctx.fill();
+
+    ctx.fillStyle=PAL.uiDim;
+    ctx.fillText("Allostatic Load", hbX+4, hbY+hbH+14);
+
+    // carried wages + buffer
+    ctx.fillStyle=PAL.ui;
+    ctx.font="14px ui-monospace, monospace";
+    ctx.fillText(`Carried Wages: ${player.coins}`, 770, 18);
+    ctx.fillStyle=PAL.uiDim;
+    ctx.fillText(`Buffer CD: ${Math.max(0,player.bufferCd).toFixed(1)}s`, 770, 38);
+
+    // support status
+    if(player.support.active){
+      ctx.fillStyle="rgba(124,255,181,0.85)";
+      ctx.fillText(`Support Aura: ${Math.ceil(player.support.dur-player.support.t)}s`, 770, 56);
+    }
+
+    ctx.restore();
+  }
+
+  function overlayBox(title, lines){
+    ctx.save();
+    const bw=740, bh=320;
+    const x=(W-bw)/2, y=(H-bh)/2;
+    ctx.fillStyle="rgba(7,12,18,0.75)";
+    drawRounded(x,y,bw,bh,16); ctx.fill();
+    ctx.strokeStyle="rgba(232,241,255,0.20)";
+    ctx.lineWidth=2; ctx.stroke();
+
+    ctx.fillStyle="#E8F1FF";
+    ctx.font="34px ui-monospace, monospace";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(title, W/2, y+62);
+
+    ctx.fillStyle="rgba(232,241,255,0.78)";
+    ctx.font="15px ui-monospace, monospace";
+    let yy=y+118;
+    for(const ln of lines){ ctx.fillText(ln, W/2, yy); yy+=22; }
+    ctx.restore();
+  }
+
+  function drawFade(){
+    if(!fade.active) return;
+    const p = clamp(fade.t/fade.dur,0,1);
+    const a = p<0.5 ? p*2 : (1-p)*2;
+
+    ctx.save();
+    ctx.globalAlpha=0.55 + a*0.35;
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,W,H);
+
+    // “tunnel streaks”
+    ctx.globalAlpha=0.85;
+    ctx.fillStyle="rgba(127,177,255,0.30)";
+    for(let i=0;i<42;i++){
+      ctx.fillRect((i*26 + (now*120))%W, 260 + (i%6)*10, 18, 3);
+    }
+    ctx.restore();
+  }
+
+  // Gameplay logic
+  function inSafe(m,x,y){
+    const t = tileAt(m,x,y);
+    return t===T.SAFE || t===T.HOME;
+  }
+  function inCanopy(x,y){
+    // canopy reduces damage a bit
+    for(const g of hazards.canopy){
+      if(g.x===x && g.y===y) return true;
+    }
+    return false;
+  }
+
+  function startTransition(target){
+    fade.active=true; fade.t=0; fade.target=target;
+    sfx(320, 0.11, 0.035, "triangle", -70);
+  }
+
+  function updateTransition(dt){
+    if(!fade.active) return;
+    fade.t += dt;
+    if(fade.t >= fade.dur){
+      fade.active=false;
+      // swap side, place player near metro exit
+      if(fade.target===STATE.EAST){
+        state=STATE.EAST;
+        player.x = EAST_METRO.x;
+        player.y = EAST_METRO.y+1;
+      } else {
+        state=STATE.WEST;
+        player.x = WEST_METRO.x;
+        player.y = WEST_METRO.y+1;
       }
-
-      // Small chance to avoid being too optimal
-      if (Math.random() < reverseBias) score += 0.18;
-
-      if (score < bestScore) {
-        bestScore = score;
-        best = d;
-      }
-    }
-
-    return best || {dx:0, dy:0};
-  }
-
-  // Update ghosts on tile grid, then interpolate pixels
-  function updateGhosts(dt) {
-    const m = currentMap();
-    const gsMul = ghostSpeedMul();
-
-    for (const g of ghosts) {
-      // Move in continuous time but snap to tile centers
-      // Use a sub-tile accumulator logic
-      if (!g._acc) g._acc = 0;
-      g._acc += dt * g.speed * gsMul;
-
-      while (g._acc >= 1) {
-        g._acc -= 1;
-
-        // Decide direction at intersections
-        const choice = ghostChooseDir(g, m);
-        g.vx = choice.dx;
-        g.vy = choice.dy;
-
-        const nx = g.x + g.vx;
-        const ny = g.y + g.vy;
-        if (canMoveTo(m, nx, ny)) {
-          g.x = nx; g.y = ny;
-        }
-
-        // Behavior side effects
-        if (g.behavior === "TRAIL" && state === STATE.WEST) {
-          // Leave smog behind in west
-          if (Math.random() < 0.35) addSmogTile(g.x, g.y);
-        }
-        if (g.behavior === "GUARD") {
-          // Heat pops occasionally where it steps
-          if (Math.random() < 0.25) addHeatTile(g.x, g.y);
-        }
-        if (g.behavior === "BURST") {
-          // Noise pulse sometimes, especially in west
-          const p = (state === STATE.WEST) ? 0.18 : 0.12;
-          if (Math.random() < p) spawnNoisePulse(g.x, g.y);
-        }
-        if (g.behavior === "CHASE") {
-          // Stress surge sometimes when close
-          if (!hazards.stress.active && dist(g.x,g.y,player.x,player.y) <= 3.2 && Math.random() < 0.12) {
-            triggerStressSurge();
-          }
-        }
-      }
-
-      // Pixel interpolation
-      g.px = g.x * TILE;
-      g.py = g.y * TILE;
+      resetGhosts();
+      sfx(520, 0.06, 0.04, "square", 60);
     }
   }
 
-  // Hazards effects
-  function updateHazards(dt) {
-    // decay smog
-    for (let i=hazards.smog.length-1;i>=0;i--) {
-      hazards.smog[i].t -= dt;
-      if (hazards.smog[i].t <= 0) hazards.smog.splice(i,1);
-    }
-    // decay heat
-    for (let i=hazards.heat.length-1;i>=0;i--) {
-      hazards.heat[i].t -= dt;
-      if (hazards.heat[i].t <= 0) hazards.heat.splice(i,1);
-    }
-    // noise pulse expand
-    for (let i=hazards.noise.length-1;i>=0;i--) {
-      const n = hazards.noise[i];
-      n.t += dt;
-      n.r += dt * 2.1;
-      if (n.t >= n.dur) hazards.noise.splice(i,1);
-    }
-    // stress
-    if (hazards.stress.active) {
-      hazards.stress.t += dt;
-      if (hazards.stress.t >= hazards.stress.dur) hazards.stress.active = false;
-    }
-  }
-
-  function inSafeZone(m, x, y) {
-    const t = tileAt(m, x, y);
-    return t === 4 || t === 5;
-  }
-
-  function inBufferRadius(x,y) {
-    if (!player.buffer.active) return false;
-    const r = player.buffer.radius;
-    return dist(x+0.5,y+0.5, player.x+0.5, player.y+0.5) <= r;
-  }
-
-  function applyDamageAndRegen(dt) {
-    const m = currentMap();
-    const sideMul = (state === STATE.WEST) ? level.westExposureMul : level.eastExposureMul;
-
-    // Are we in contact with any ghost?
-    let contact = false;
-    for (const g of ghosts) {
-      if (g.x === player.x && g.y === player.y) { contact = true; break; }
-    }
-
-    // Are we standing in a hazard tile?
-    let hazardMul = 1.0;
-
-    // Smog tile underfoot
-    for (const s of hazards.smog) {
-      if (s.x === player.x && s.y === player.y) { hazardMul *= 1.18; break; }
-    }
-    // Heat underfoot
-    for (const h of hazards.heat) {
-      if (h.x === player.x && h.y === player.y) { hazardMul *= 1.20; break; }
-    }
-    // Noise ring overlap (approx)
-    for (const n of hazards.noise) {
-      const d = dist(player.x+0.5, player.y+0.5, n.x+0.5, n.y+0.5);
-      const rr = n.r * 3.2;
-      if (Math.abs(d - rr) < 0.25) { hazardMul *= 1.25; break; }
-    }
-
-    // Stress surge global multiplier
-    if (hazards.stress.active) hazardMul *= hazards.stress.mul;
-
-    // Buffer reduces effective hazard
-    if (inBufferRadius(player.x, player.y)) hazardMul *= 0.70;
-
-    const safe = inSafeZone(m, player.x, player.y);
-
-    // Damage
-    if (contact) {
-      const safeReduce = safe ? level.safeDamageReduce : 1.0;
-      const dps = level.baseDps * sideMul * hazardMul * safeReduce;
-      player.hp -= dps * dt;
-      player.dmgCooldown = 0.20; // short cooldown to prevent instant regen
-      sfx(260, 0.03, 0.025, "square", -20);
-    } else {
-      player.dmgCooldown -= dt;
-    }
-
-    // Regen if not recently damaged
-    if (player.dmgCooldown <= 0) {
-      const regenMul = safe ? level.safeRegenBoost : 1.0;
-      const regen = level.regenPerSec * regenMul;
-      player.hp += regen * dt;
-    }
-
-    player.hp = clamp(player.hp, 0, player.maxHp);
-    if (player.hp <= 0) {
-      state = STATE.GAMEOVER;
-      sfx(110, 0.14, 0.06, "square", -55);
-    }
-  }
-
-  // Collect coins and wages, bank at home
-  function handlePickups() {
-    const m = currentMap();
+  function handlePickups(){
+    const m = curMap();
     const t = tileAt(m, player.x, player.y);
 
-    if (t === 2) {
-      // small coin
-      m[player.y][player.x] = 0;
-      player.score += 5;
-      sfx(740, 0.04, 0.035, "square", 40);
+    if(t===T.COIN){
+      m[player.y][player.x]=T.FLOOR;
+      player.score += 4;
+      sfx(720, 0.04, 0.03, "square", 60);
     }
 
-    if (t === 6) {
-      // wage token
-      m[player.y][player.x] = 0;
-      player.coinsCarried += 1;
-      player.score += 25;
+    if(t===T.WAGE){
+      m[player.y][player.x]=T.FLOOR;
+      player.coins += 1;
+      player.score += 30;
       sfx(920, 0.05, 0.04, "square", 80);
     }
 
-    // bank at home tile (west only)
-    if (state === STATE.WEST && t === 5 && player.coinsCarried > 0) {
-      player.coinsBanked += player.coinsCarried;
-      player.score += player.coinsCarried * 40;
-      player.coinsCarried = 0;
-      sfx(520, 0.08, 0.05, "triangle", 0);
-      sfx(740, 0.06, 0.04, "square", 0);
-    }
-  }
-
-  // Metro transitions
-  let fade = { active: false, t: 0, dur: 0.45, target: null };
-
-  function startMetroTransition(targetState) {
-    fade.active = true;
-    fade.t = 0;
-    fade.target = targetState;
-    sfx(300, 0.10, 0.035, "triangle", -60);
-  }
-
-  function updateMetro(dt) {
-    if (!fade.active) return;
-    fade.t += dt;
-
-    if (fade.t >= fade.dur) {
-      fade.active = false;
-      // Switch state, relocate player to corresponding metro exit
-      if (fade.target === STATE.EAST) {
-        state = STATE.EAST;
-        player.x = EAST_METRO.x;
-        player.y = EAST_METRO.y + 1;
-      } else {
-        state = STATE.WEST;
-        player.x = WEST_METRO.x;
-        player.y = WEST_METRO.y + 1;
-      }
-
-      // Reset ghosts positions each side for Level 1 clarity
-      for (const g of ghosts) {
-        g.x = Math.floor(COLS*0.5);
-        g.y = Math.floor(ROWS*0.45);
-        g.vx = 0; g.vy = 0;
-        g._acc = 0;
-      }
-    }
-  }
-
-  function maybeTriggerMetro() {
-    const m = currentMap();
-    if (tileAt(m, player.x, player.y) !== 3) return;
-
-    if (state === STATE.WEST) startMetroTransition(STATE.EAST);
-    else if (state === STATE.EAST) startMetroTransition(STATE.WEST);
-  }
-
-  // Buffer and sprint
-  function handleAbilities(dt) {
-    player.bufferCooldown -= dt;
-    if (player.buffer.active) {
-      player.buffer.t += dt;
-      if (player.buffer.t >= player.buffer.dur) player.buffer.active = false;
-    }
-
-    if (keys.has("m")) {
-      keys.delete("m");
-      muted = !muted;
-      sfx(muted ? 160 : 760, 0.06, 0.05, "square", 0);
-    }
-
-    if (keys.has("enter")) {
-      keys.delete("enter");
-      if (state === STATE.TITLE) {
-        state = STATE.WEST;
-        try { ensureAudio(); } catch {}
-      } else if (state === STATE.GAMEOVER) {
-        resetRun();
-        state = STATE.WEST;
-      }
-    }
-
-    // Buffer (Space)
-    if (keys.has("space") && player.bufferCooldown <= 0 && state !== STATE.TITLE && state !== STATE.GAMEOVER) {
-      keys.delete("space");
-      player.buffer.active = true;
-      player.buffer.t = 0;
-      player.bufferCooldown = 4.2;
+    if(t===T.FRIEND){
+      m[player.y][player.x]=T.FLOOR;
+      player.support.active = true;
+      player.support.t = 0;
       sfx(660, 0.08, 0.04, "triangle", 0);
+      sfx(980, 0.05, 0.03, "square", 0);
+    }
+
+    if(t===T.TREE){
+      m[player.y][player.x]=T.FLOOR;
+      // spawn canopy patch around player for a bit
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        const x=player.x+dx, y=player.y+dy;
+        if(canMove(m,x,y)) hazards.canopy.push({x,y,t:3.2});
+      }
+      sfx(520, 0.08, 0.035, "triangle", 0);
+    }
+
+    // Bank wages at HOME (west only)
+    if(state===STATE.WEST && t===T.HOME && player.coins>0){
+      player.banked += player.coins;
+      player.score += player.coins * 60;
+      player.coins = 0;
+
+      // bonus when hitting goal
+      if(player.banked >= level.bankGoal){
+        player.score += 250;
+        sfx(740, 0.07, 0.05, "square", 80);
+        sfx(520, 0.10, 0.05, "triangle", 0);
+        // reset goal counter to keep loop going
+        player.banked = 0;
+      } else {
+        sfx(520, 0.07, 0.04, "triangle", 0);
+      }
+    }
+  }
+
+  // Abilities
+  function handleAbilities(dt){
+    if(keys.has("m")){
+      keys.delete("m");
+      muted=!muted;
+      sfx(muted?160:760, 0.06, 0.05, "square", 0);
+    }
+
+    if(keys.has("enter")){
+      keys.delete("enter");
+      if(state===STATE.TITLE){
+        state=STATE.WEST;
+        try{ ensureAudio(); }catch{}
+      } else if(state===STATE.GAMEOVER){
+        resetRun();
+        state=STATE.WEST;
+      }
+    }
+
+    player.bufferCd -= dt;
+    if(player.buffer.active){
+      player.buffer.t += dt;
+      if(player.buffer.t>=player.buffer.dur) player.buffer.active=false;
+    }
+
+    if(keys.has("space") && player.bufferCd<=0 && state!==STATE.TITLE && state!==STATE.GAMEOVER){
+      keys.delete("space");
+      player.buffer.active=true;
+      player.buffer.t=0;
+      player.bufferCd=4.0;
+      sfx(640, 0.08, 0.04, "triangle", 0);
       sfx(980, 0.04, 0.03, "square", 0);
     }
+
+    if(player.support.active){
+      player.support.t += dt;
+      if(player.support.t >= player.support.dur) player.support.active=false;
+    }
   }
 
-  // Player movement on grid, tile-stepped but smooth-looking
-  let moveAcc = 0;
-
-  function updatePlayer(dt) {
-    const m = currentMap();
-    const base = player.speed;
+  // Player movement grid-stepped, smooth render
+  let moveAcc=0;
+  function updatePlayer(dt){
+    const m=curMap();
     const sprinting = keys.has("shift");
-    const spd = base * (sprinting ? player.sprintMul : 1.0);
+    const spd = player.speed * (sprinting ? player.sprintMul : 1);
 
-    // Sprint has slight health cost, kept subtle for Level 1
-    if (sprinting && state !== STATE.TITLE && state !== STATE.GAMEOVER) {
-      player.hp -= dt * 1.8;
+    // sprint costs a tiny bit, not punishing
+    if(sprinting && state!==STATE.TITLE && state!==STATE.GAMEOVER){
+      player.hp -= dt * 1.3;
     }
 
     moveAcc += dt * spd;
 
-    // Input direction
-    let dx = 0, dy = 0;
-    if (keys.has("arrowleft") || keys.has("a")) dx = -1;
-    else if (keys.has("arrowright") || keys.has("d")) dx = 1;
-    else if (keys.has("arrowup") || keys.has("w")) dy = -1;
-    else if (keys.has("arrowdown") || keys.has("s")) dy = 1;
+    let dx=0, dy=0;
+    if(keys.has("arrowleft")||keys.has("a")) dx=-1;
+    else if(keys.has("arrowright")||keys.has("d")) dx=1;
+    else if(keys.has("arrowup")||keys.has("w")) dy=-1;
+    else if(keys.has("arrowdown")||keys.has("s")) dy=1;
 
-    while (moveAcc >= 1) {
+    while(moveAcc>=1){
       moveAcc -= 1;
-
-      const nx = player.x + dx;
-      const ny = player.y + dy;
-
-      if (dx !== 0 || dy !== 0) {
-        if (canMoveTo(m, nx, ny)) {
-          player.x = nx; player.y = ny;
-          // little step click
-          if (Math.random() < 0.22) sfx(220, 0.02, 0.012, "square", 0);
-        }
+      const nx=player.x+dx, ny=player.y+dy;
+      if((dx||dy) && canMove(m,nx,ny)){
+        player.x=nx; player.y=ny;
+        if(Math.random()<0.18) sfx(210, 0.02, 0.010, "square", 0);
       }
 
-      // pickups and metro
       handlePickups();
-      maybeTriggerMetro();
+
+      // Metro tile triggers transition
+      if(tileAt(m,player.x,player.y)===T.METRO && !fade.active){
+        if(state===STATE.WEST) startTransition(STATE.EAST);
+        else startTransition(STATE.WEST);
+      }
     }
 
-    // interpolate pixels
-    player.px = player.x * TILE;
-    player.py = player.y * TILE;
+    player.px = player.x*TILE;
+    player.py = player.y*TILE;
   }
 
-  // --- Music timing
-  function updateMusic(dt) {
-    if (state === STATE.TITLE || state === STATE.GAMEOVER) return;
-    if (!audioCtx || muted) return;
+  function updateGhostRhythm(dt){
+    ghostRhythm.t += dt;
+    if(ghostRhythm.phase==="CHASE" && ghostRhythm.t>=ghostRhythm.chase){
+      ghostRhythm.phase="SCATTER"; ghostRhythm.t=0;
+    } else if(ghostRhythm.phase==="SCATTER" && ghostRhythm.t>=ghostRhythm.scatter){
+      ghostRhythm.phase="CHASE"; ghostRhythm.t=0;
+    }
+  }
 
-    const spb = 60 / music.bpm;
-    // 16th notes
-    const stepDur = spb / 4;
+  function updateGhosts(dt){
+    const m=curMap();
+    updateGhostRhythm(dt);
+
+    for(const g of ghosts){
+      g.acc += dt * g.speed;
+      while(g.acc>=1){
+        g.acc -= 1;
+        const d = chooseDir(g,m);
+        g.vx=d.dx; g.vy=d.dy;
+        const nx=g.x+g.vx, ny=g.y+g.vy;
+        if(canMove(m,nx,ny)){ g.x=nx; g.y=ny; }
+
+        // SMOG ghost occasionally seeds smog tiles (mostly WEST)
+        if(g.name==="SMOG" && Math.random() < (state===STATE.WEST ? 0.18 : 0.10)){
+          hazards.smog.push({x:g.x,y:g.y,t:2.6});
+        }
+      }
+      g.px = g.x*TILE;
+      g.py = g.y*TILE;
+    }
+  }
+
+  function updateHazards(dt){
+    for(let i=hazards.smog.length-1;i>=0;i--){
+      hazards.smog[i].t -= dt;
+      if(hazards.smog[i].t<=0) hazards.smog.splice(i,1);
+    }
+    for(let i=hazards.canopy.length-1;i>=0;i--){
+      hazards.canopy[i].t -= dt;
+      if(hazards.canopy[i].t<=0) hazards.canopy.splice(i,1);
+    }
+    // ambient smog drifts in on WEST
+    if(state===STATE.WEST && Math.random() < dt*0.35){
+      hazards.smog.push({x:irand(1,COLS-2), y:irand(3,ROWS-2), t:2.6});
+    }
+  }
+
+  function applyDamageAndRegen(dt){
+    const m=curMap();
+    const sideMul = (state===STATE.WEST) ? level.westMul : level.eastMul;
+
+    // contact
+    let contact=false;
+    for(const g of ghosts){
+      if(g.x===player.x && g.y===player.y){ contact=true; break; }
+    }
+
+    // smog on tile
+    let smogHere=false;
+    for(const s of hazards.smog){
+      if(s.x===player.x && s.y===player.y){ smogHere=true; break; }
+    }
+
+    // support + buffer reduce effective damage
+    let dmgMul = 1.0;
+    if(smogHere) dmgMul *= 1.18;
+    if(inCanopy(player.x,player.y)) dmgMul *= 0.82;
+    if(player.support.active) dmgMul *= 0.78;
+
+    // buffer radius
+    if(player.buffer.active){
+      const r=player.buffer.radius;
+      if(dist(player.x+0.5,player.y+0.5, player.x+0.5,player.y+0.5) <= r) {
+        // always true at center, but we only need “active reduces damage”
+        dmgMul *= 0.78;
+      }
+    }
+
+    const safe = inSafe(m,player.x,player.y);
+    if(safe) dmgMul *= level.safeDamageMul;
+
+    if(player.dmgGrace>0) player.dmgGrace -= dt;
+
+    if(contact && player.dmgGrace<=0){
+      player.hp -= level.baseDps * sideMul * dmgMul * dt;
+      player.dmgGrace = level.invulnAfterHit; // grace after hit makes it avoidable
+      sfx(260, 0.03, 0.025, "square", -20);
+    } else {
+      // regen
+      const regenMul = safe ? level.safeRegenMul : 1.0;
+      const supportMul = player.support.active ? 1.25 : 1.0;
+      const canopyMul = inCanopy(player.x,player.y) ? 1.15 : 1.0;
+      player.hp += level.regenPerSec * regenMul * supportMul * canopyMul * dt;
+    }
+
+    player.hp = clamp(player.hp, 0, player.maxHp);
+    if(player.hp<=0){
+      state=STATE.GAMEOVER;
+      sfx(110, 0.14, 0.06, "square", -55);
+    }
+  }
+
+  function drawMetroOverlays(){
+    const m = curMap();
+    // draw metro entrance overlay where tiles are METRO
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(tileAt(m,x,y)===T.METRO){
+          const px=x*TILE, py=y*TILE;
+          const label = (state===STATE.WEST) ? "TO_EAST" : "TO_WEST";
+          drawMetroEntrance(px,py,label);
+        }
+      }
+    }
+  }
+
+  function drawSafeLabels(){
+    const m=curMap();
+    // label safe + home subtly
+    ctx.save();
+    ctx.font="11px ui-monospace, monospace";
+    ctx.textAlign="center";
+    ctx.textBaseline="top";
+
+    function labelAt(x,y,text,color){
+      const px=x*TILE+TILE/2;
+      const py=y*TILE+TILE+2;
+      ctx.fillStyle=color;
+      ctx.globalAlpha=0.85;
+      ctx.fillText(text, px, py);
+      ctx.globalAlpha=1;
+    }
+
+    if(state===STATE.WEST){
+      labelAt(WEST_HOME.x, WEST_HOME.y, "HOME / BANK", "rgba(232,241,255,0.75)");
+      labelAt(WEST_SAFE.x, WEST_SAFE.y, "SAFE PLACE", "rgba(124,255,181,0.80)");
+    } else {
+      labelAt(EAST_SAFE.x, EAST_SAFE.y, "SAFE PLACE", "rgba(124,255,181,0.80)");
+      labelAt(EAST_WAGE.x, EAST_WAGE.y, "WAGES", "rgba(255,214,107,0.85)");
+    }
+    ctx.restore();
+  }
+
+  function updateMusic(dt){
+    if(state===STATE.TITLE || state===STATE.GAMEOVER) return;
+    if(!audioCtx || muted) return;
+    const spb = 60/music.bpm;
+    const stepDur = spb/4;
     music.timer += dt;
-
-    while (music.timer >= stepDur) {
+    while(music.timer>=stepDur){
       music.timer -= stepDur;
-      music.step = (music.step + 1) % 16;
-      playMusicStep();
+      music.step = (music.step+1)%16;
+      musicTick();
     }
   }
 
-  // --- Title and overlays
-  function overlayBox(title, lines) {
-    ctx.save();
-    const bw = 720, bh = 320;
-    const x = (W - bw) / 2;
-    const y = (H - bh) / 2;
+  function resetRun(){
+    player.x=WEST_HOME.x; player.y=WEST_HOME.y;
+    player.hp=100; player.coins=0; player.banked=0; player.score=0;
+    player.buffer.active=false; player.buffer.t=0; player.bufferCd=0;
+    player.support.active=false; player.support.t=0;
+    player.dmgGrace=0;
+    hazards.smog=[]; hazards.canopy=[];
+    resetGhosts();
+    fade.active=false;
 
-    ctx.fillStyle = "rgba(8,12,18,0.72)";
-    drawRounded(x, y, bw, bh, 16);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(232,241,255,0.20)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#E8F1FF";
-    ctx.font = "34px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(title, W/2, y + 62);
-
-    ctx.fillStyle = "rgba(232,241,255,0.75)";
-    ctx.font = "15px ui-monospace, monospace";
-    let yy = y + 118;
-    for (const ln of lines) {
-      ctx.fillText(ln, W/2, yy);
-      yy += 22;
-    }
-    ctx.restore();
+    state=STATE.WEST;
+    player.px=player.x*TILE; player.py=player.y*TILE;
   }
 
-  function drawFade() {
-    if (!fade.active) return;
-    const p = clamp(fade.t / fade.dur, 0, 1);
-    const a = p < 0.5 ? p*2 : (1 - p)*2;
-    ctx.save();
-    ctx.globalAlpha = 0.55 + a*0.35;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0,0,W,H);
+  // Render
+  function draw(){
+    const side = (state===STATE.WEST) ? "WEST" : "EAST";
+    drawBackdrop(side);
 
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = "rgba(127,177,255,0.25)";
-    for (let i=0;i<40;i++){
-      ctx.fillRect((i*28 + (perfNow*0.08))%W, 260 + (i%5)*10, 16, 3);
-    }
-    ctx.restore();
-  }
-
-  // --- Main loop
-  let last = 0;
-  let perfNow = 0;
-
-  function update(dt) {
-    handleAbilities(dt);
-    if (fade.active) updateMetro(dt);
-
-    if (state === STATE.WEST || state === STATE.EAST) {
-      updatePlayer(dt);
-      updateGhosts(dt);
-      updateHazards(dt);
-      applyDamageAndRegen(dt);
-
-      // Score over time (survival)
-      player.score += dt * 6;
-
-      // Occasional ambient stress and hazard seeding
-      if (!hazards.stress.active && Math.random() < dt * 0.018 && state === STATE.WEST) triggerStressSurge();
-      if (Math.random() < dt * (state === STATE.WEST ? 0.22 : 0.12)) addSmogTile(Math.floor(rand(2,COLS-2)), Math.floor(rand(3,ROWS-2)));
-      if (Math.random() < dt * 0.10) addHeatTile(Math.floor(rand(2,COLS-2)), Math.floor(rand(3,ROWS-2)));
-    }
-
-    updateMusic(dt);
-  }
-
-  function draw() {
-    if (state === STATE.WEST) drawBackdrop("WEST");
-    else if (state === STATE.EAST) drawBackdrop("EAST");
-    else drawBackdrop("WEST");
-
-    // map + hazards + entities
-    if (state !== STATE.TITLE) drawMap();
-    if (state === STATE.WEST || state === STATE.EAST) {
-      drawHazards();
-      for (const g of ghosts) drawGhost(g);
-      drawPlayer();
-      drawHUD();
-    }
-
-    // Overlays
-    if (state === STATE.TITLE) {
-      overlayBox("METRO DIVIDE", [
-        "You commute across Santiago to earn wages and return home.",
-        "Ghosts are stressors. Contact increases allostatic load.",
-        "Collect wage tokens in the East, bank them at Home in the West.",
-        "Safe places boost recovery. Buffer helps you pass through pressure.",
+    if(state===STATE.TITLE){
+      overlayBox("SANTIAGO METRO ESCAPE", [
+        "Commute across the city, collect wages, and bring them home.",
+        "Ghosts are stressors: contact increases allostatic load.",
+        "Safe Places help you recover fast. Friends & Family give a support aura.",
+        "Trees create canopy patches that reduce exposure.",
         "",
         "Press Enter to Start • Space: Buffer • Shift: Sprint • M: Mute"
       ]);
+      drawScanlines();
+      return;
     }
 
-    if (state === STATE.GAMEOVER) {
+    // map
+    drawMap();
+
+    // hazards
+    drawHazards();
+
+    // metro entrance overlays + labels
+    drawMetroOverlays();
+    drawSafeLabels();
+
+    // ghosts + player
+    for(const g of ghosts) drawGhost(g);
+    drawPlayer();
+
+    // HUD
+    drawHUD();
+
+    if(state===STATE.GAMEOVER){
       overlayBox("COGNITIVE COLLAPSE", [
-        `Level: ${level.number}`,
-        `Banked Wages: ${player.coinsBanked}`,
         `Score: ${Math.floor(player.score)}`,
+        `Wages delivered: ${player.banked} (goal resets each bonus)`,
         "",
         "Chronic environmental stress is linked to cognitive decline risk.",
         "",
@@ -1242,17 +1321,35 @@
     drawScanlines();
   }
 
-  function loop(ts) {
-    perfNow = ts;
-    const dt = clamp((ts - last) / 1000, 0, 0.033);
-    last = ts;
-    update(dt);
+  // Main loop
+  let last=0;
+  function loop(ts){
+    now = ts/1000;
+    const dt = clamp((ts-last)/1000, 0, 0.033);
+    last=ts;
+
+    handleAbilities(dt);
+
+    if(fade.active) updateTransition(dt);
+
+    if(state===STATE.WEST || state===STATE.EAST){
+      updatePlayer(dt);
+      updateGhosts(dt);
+      updateHazards(dt);
+      applyDamageAndRegen(dt);
+
+      player.score += dt * 7; // survival points
+    }
+
+    updateMusic(dt);
     draw();
+
     requestAnimationFrame(loop);
   }
 
   // Start
   resetRun();
+  state = STATE.TITLE;
   requestAnimationFrame(loop);
 
 })();
