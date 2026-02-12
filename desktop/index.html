@@ -3,81 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Santiago Metro Escape - Level 1 (v3)</title>
+  <title>Santiago Metro Escape - Level 1 (Pac-style)</title>
   <style>
-    html, body {
-      margin: 0; height: 100%;
-      background: #060A10;
-      color: #E8F1FF;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      overflow: hidden;
-    }
-    #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
+    html, body { margin:0; height:100%; background:#05080E; color:#E8F1FF; overflow:hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    #wrap { position:fixed; inset:0; display:grid; place-items:center; }
     canvas {
       width: min(96vw, 1120px);
       aspect-ratio: 14 / 10;
-      background: #000;
       border-radius: 14px;
       border: 1px solid rgba(232,241,255,0.14);
       box-shadow: 0 14px 42px rgba(0,0,0,0.40);
+      background:#000;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
-    .hint {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 14px;
-      font-size: 12px;
-      opacity: 0.85;
-      text-align: center;
-      padding: 8px 12px;
-      border-radius: 999px;
+    .hint{
+      position:fixed; left:50%; transform:translateX(-50%); bottom:14px;
+      font-size:12px; opacity:0.85; text-align:center;
+      padding:8px 12px; border-radius:999px;
       background: rgba(7,12,18,0.55);
       border: 1px solid rgba(232,241,255,0.14);
       backdrop-filter: blur(6px);
-      max-width: min(900px, 92vw);
+      max-width:min(920px,92vw);
     }
   </style>
 </head>
 <body>
   <div id="wrap"><canvas id="c" width="980" height="700"></canvas></div>
-  <div class="hint" id="hint">
-    Move: Arrow Keys / WASD • Buffer: Space • Sprint: Shift • Help: H • Mute: M • Start/Restart: Enter
-  </div>
+  <div class="hint">Move: WASD / Arrows • Buffer (power-up): Space • Help: H • Mute: M • Start/Restart: Enter</div>
 
 <script>
 (() => {
   const c = document.getElementById("c");
   const ctx = c.getContext("2d");
 
-  const W = c.width, H = c.height;
+  const W=c.width, H=c.height;
 
-  // Arcade-ish scale: fewer tiles, clear corridors
-  const TILE = 28;
-  const COLS = Math.floor(W / TILE); // 35
-  const ROWS = Math.floor(H / TILE); // 25
+  // Pac-scale: readable corridors
+  const TILE=28;
+  const COLS=Math.floor(W/TILE); // 35
+  const ROWS=Math.floor(H/TILE); // 25
 
-  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
-  const rand = (a,b)=>a+Math.random()*(b-a);
-  const dist = (ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
 
   // Input
-  const keys = new Set();
-  addEventListener("keydown", (e)=>{
-    const k = (e.key===" " ? "space" : e.key.toLowerCase());
+  const keys=new Set();
+  addEventListener("keydown", e=>{
+    const k=(e.key===" "?"space":e.key.toLowerCase());
     keys.add(k);
-    if (["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
+    if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
   });
-  addEventListener("keyup", (e)=>{
-    const k = (e.key===" " ? "space" : e.key.toLowerCase());
+  addEventListener("keyup", e=>{
+    const k=(e.key===" "?"space":e.key.toLowerCase());
     keys.delete(k);
   });
 
   // Audio
   let audioCtx=null, muted=false;
-  function ensureAudio(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
-  function sfx(freq=440, dur=0.06, vol=0.05, type="square", slide=0){
+  function ensureAudio(){ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }
+  function sfx(freq=440,dur=0.06,vol=0.05,type="square",slide=0){
     if(muted) return;
     try{
       ensureAudio();
@@ -85,65 +72,69 @@
       const o=audioCtx.createOscillator();
       const g=audioCtx.createGain();
       o.type=type;
-      o.frequency.setValueAtTime(freq, t0);
-      if(slide) o.frequency.linearRampToValueAtTime(freq+slide, t0+dur);
-      g.gain.setValueAtTime(vol, t0);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+      o.frequency.setValueAtTime(freq,t0);
+      if(slide) o.frequency.linearRampToValueAtTime(freq+slide,t0+dur);
+      g.gain.setValueAtTime(vol,t0);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
       o.connect(g); g.connect(audioCtx.destination);
       o.start(t0); o.stop(t0+dur);
     }catch{}
   }
 
-  // Simple catchy loop
-  const music = {
-    bpm: 132,
-    timer: 0,
-    step: 0,
-    lead: [0,2,4,7,  4,2,0,-3,  0,2,4,9,  7,4,2,0],
-    bass: [-12,-12,-10,-10,  -12,-12,-15,-15,  -12,-12,-10,-10,  -12,-12,-15,-15],
+  // Music loop
+  const music={ bpm:132, timer:0, step:0,
+    lead:[0,2,4,7, 4,2,0,-3, 0,2,4,9, 7,4,2,0],
+    bass:[-12,-12,-10,-10, -12,-12,-15,-15, -12,-12,-10,-10, -12,-12,-15,-15]
   };
   function noteHz(semi){ return 440*Math.pow(2, semi/12); }
   function musicTick(){
     if(muted) return;
     ensureAudio();
     const base=-9;
-    const st = music.step%16;
-    sfx(noteHz(base + music.lead[st]), 0.07, 0.020, "square", 0);
-    if(st%2===0) sfx(noteHz(base - 12 + music.bass[st]), 0.10, 0.026, "triangle", 0);
+    const st=music.step%16;
+    sfx(noteHz(base+music.lead[st]),0.07,0.020,"square",0);
+    if(st%2===0) sfx(noteHz(base-12+music.bass[st]),0.10,0.026,"triangle",0);
   }
 
   // State
-  const STATE = { TITLE:"TITLE", WEST:"WEST", EAST:"EAST", METRO:"METRO", GAMEOVER:"GAMEOVER" };
-  let state = STATE.TITLE;
-  let showHelp = true;
+  const STATE={TITLE:"TITLE", WEST:"WEST", EAST:"EAST", GAMEOVER:"GAMEOVER"};
+  let state=STATE.TITLE;
+  let showHelp=true;
 
   // Tiles
-  // 0 floor, 1 wall
-  // 2 dot, 3 metro, 4 safe, 5 home/bank, 6 wage, 7 friend, 8 tree
-  const T = { FLOOR:0, WALL:1, DOT:2, METRO:3, SAFE:4, HOME:5, WAGE:6, FRIEND:7, TREE:8 };
-
-  // Visual palette
-  const PAL = {
-    ui:"#E8F1FF",
-    uiDim:"rgba(232,241,255,0.75)",
-    bg0:"#060A10",
-    westSky0:"#20406B",
-    eastSky0:"#1E4C7D",
-    westFloor:"#101827",
-    eastFloor:"#0D1C2C",
-    westWall:"#2A2F4A",
-    eastWall:"#1B3B66",
-    wallGlow:"rgba(127,177,255,0.10)",
-    dot:"#CFE3FF",
-    wage:"#FFD66B",
-    friend:"#7CFFB5",
-    tree:"#66D6FF",
-    safe:"#7CFFB5",
-    metro:"#7FB1FF",
-    danger:"#FF4D6D",
+  const T={
+    FLOOR:0, WALL:1,
+    DOT:2,
+    METRO:3,
+    SAFE:4,
+    HOME:5,
+    WAGE:6,
+    SUPPORT:7,    // power pellet (friends/family)
+    TREE:8,
+    HOUSE:9
   };
 
-  function drawRounded(x,y,w,h,r){
+  // Palette
+  const PAL={
+    ui:"#E8F1FF",
+    uiDim:"rgba(232,241,255,0.75)",
+    westFloor:"#0D1A2B",
+    eastFloor:"#081D2D",
+    westWall:"#3A2E63",
+    eastWall:"#184E77",
+    neon:"rgba(127,177,255,0.30)",
+    dot:"#CFE3FF",
+    wage:"#FFD66B",
+    support:"#7CFFB5",
+    safe:"#7CFFB5",
+    metro:"#7FB1FF",
+    tree:"#66D6FF",
+    house:"#FF8ED6",
+    bus:"#FF6B87",
+    bus2:"#FFD66B",
+  };
+
+  function rr(x,y,w,h,r){
     ctx.beginPath();
     ctx.moveTo(x+r,y);
     ctx.arcTo(x+w,y,x+w,y+h,r);
@@ -153,25 +144,25 @@
     ctx.closePath();
   }
 
-  // Hand-designed Pac-Man-ish maps, readable corridors
-  // 35 x 25. Legend per row uses chars:
-  // # wall, . dot, M metro, S safe, H home, W wage, F friend, T tree, space floor
-  function parseMap(lines){
+  // Pac-man style looped map with multiple routes + wrap tunnels.
+  // Legend: # wall, . dot, O support, M metro, S safe, H home, W wage, T tree, A house, space floor
+  function parse(lines){
     const m=[];
     for(let y=0;y<ROWS;y++){
       const row=[];
-      const line = (lines[y] || "").padEnd(COLS, " ");
+      const line=(lines[y]||"").padEnd(COLS," ");
       for(let x=0;x<COLS;x++){
         const ch=line[x];
         let v=T.FLOOR;
         if(ch==="#") v=T.WALL;
         else if(ch===".") v=T.DOT;
+        else if(ch==="O") v=T.SUPPORT;
         else if(ch==="M") v=T.METRO;
         else if(ch==="S") v=T.SAFE;
         else if(ch==="H") v=T.HOME;
         else if(ch==="W") v=T.WAGE;
-        else if(ch==="F") v=T.FRIEND;
         else if(ch==="T") v=T.TREE;
+        else if(ch==="A") v=T.HOUSE;
         row.push(v);
       }
       m.push(row);
@@ -179,280 +170,273 @@
     return m;
   }
 
-  const westLines = [
+  // WEST: more residential, more trees/houses, slightly heavier “traffic lane”
+  const westLines=[
     "###################################",
-    "#S...........####.....####........#",
-    "#.####.#####.####.###.####.#####..#",
-    "#.####.#####......###......#####..#",
-    "#.####.#####.####.###.####.#####..#",
-    "#.............####.....####........#",
-    "###.####.###############.####.###..#",
-    "###.####.....#######.....####.###..#",
-    "#...####.###.#######.###.####...#..#",
-    "#.######.###...#####...#.######.#..#",
-    "#.........###..#####..###........#..#",
-    "#.#######.###..#####..###.#######..#",
-    "#.#######......#####......#######..#",
-    "#.....####.###############.####.....#",
-    "#####.####.....#######.....####.#####",
-    "#.....####.###.#######.###.####.....#",
-    "#..#######.###...#...###.#######..M#",
-    "#..#.......###...#...###.......#....#",
-    "#..#.#####.###.#####.###.#####.#.####",
-    "#..#.#####.....#####.....#####.#....#",
-    "#..#.#####.###.#####.###.#####.####.#",
-    "#..#.....#.###.......###.#.....#H...#",
-    "#..#####.#.#############.#.#####....#",
-    "#........#...............#..........#",
-    "###################################",
-  ];
-
-  const eastLines = [
-    "###################################",
-    "#.............####.....####.....S.#",
-    "#..#####.#####.####.###.####.#####.#",
-    "#..#####.#####......###......#####.#",
-    "#..#####.#####.####.###.####.#####.#",
-    "#...............####.....####.......#",
-    "#..###.####.###############.####.###",
-    "#..###.####.....#######.....####.###",
-    "#..#...####.###.#######.###.####...#",
-    "#..#.######.###...#####...#.######.#",
-    "#..#........###..#####..###........#",
-    "#..#######..###..#####..###..#######",
-    "#..#######.......#####.......#######",
-    "#.....####.###############.####.....#",
-    "#####.####.....#######.....####.#####",
-    "#.....####.###.#######.###.####.....#",
-    "#M..#######.###...#...###.#######..#",
-    "#....#.......###...#...###.......#..#",
-    "####.#.#####.###.#####.###.#####.#..#",
-    "#....#.#####.....#####.....#####.#..#",
-    "#.####.#####.###.#####.###.#####.#..#",
-    "#....#.....#.###.......###.#.....#..#",
-    "#....#####.#.#############.#.#####..#",
-    "#..W...F..T#...............#..W..W..#",
+    "#S..A....A....#.......#....A....S.#",
+    "#.###.#####.###.#####.###.#####.###",
+    "#.O..#.....#.....#.....#.....#..O.#",
+    "#.###.###.#####.###.#####.###.###.#",
+    "#.....#...#...#.....#...#...#.....#",
+    "###.###.###.#.#######.#.###.###.###",
+    "#...#.....#.#...#...#.#.....#.....#",
+    "#.###.###.#.###.#.###.#.###.###.###",
+    "#.....#...#.....#.....#...#.....#.#",
+    "###.###.#########.#########.###.###",
+    "#.....#.....A.....#.....A.....#...#",
+    "#.###.###.###.###.#.###.###.###.###",
+    "#...#...#.#.....#.#.....#...#.....#",
+    "###.###.#.#.###.#.#.###.#.###.###.#",
+    "#.....#.#.#.#...#.#...#.#.#.....#.#",
+    "#.###.#.#.#.#.###.###.#.#.#.###.#.#",
+    "#...#.#...#.#.....#...#...#...#...#",
+    "#.###.#####.#######.#####.#####.###",
+    "#.....#.....#.....#.....#.....#...#",
+    "###.###.###.#.###.#.###.#.###.###.#",
+    "#..H..#...#.#...#.#...#.#...#.....#",
+    "#.###.###.#.###.#.#.###.#.###.###.#",
+    "#.....T...#.....#.....#...T.....M.#",
     "###################################",
   ];
 
-  const west = parseMap(westLines);
-  const east = parseMap(eastLines);
-
-  // Ensure some dots for feedback
-  function dotify(m){
-    for(let y=1;y<ROWS-1;y++){
-      for(let x=1;x<COLS-1;x++){
-        if(m[y][x]===T.FLOOR && Math.random()<0.20) m[y][x]=T.DOT;
-      }
-    }
-  }
-  dotify(west);
-  dotify(east);
-
-  function curMap(){ return (state===STATE.WEST) ? west : east; }
-
-  // Player
-  const player = {
-    x: 3, y: ROWS-4,
-    px: 0, py: 0,
-    hp: 100, maxHp: 100,
-    speed: 7.5,
-    sprintMul: 1.45,
-    coins: 0,
-    banked: 0,
-    score: 0,
-    buffer: { active:false, t:0, dur:2.0, radius:2.2 },
-    bufferCd: 0,
-    support: { active:false, t:0, dur:6.0 },
-    dmgGrace: 0,
-  };
-
-  // Level tuning: damage is now guaranteed
-  const level = {
-    baseDps: 18,              // contact DPS
-    westMul: 1.20,
-    eastMul: 0.95,
-    regenPerSec: 7.0,
-    safeRegenMul: 2.2,
-    safeDamageMul: 0.55,
-    graceAfterHit: 0.45,
-    bankGoal: 3,
-  };
-
-  // Exposome “floating circles” are smog puffs (hazards)
-  const hazards = {
-    smog: [],     // {x,y,r,t}
-    canopy: [],   // {x,y,r,t}
-  };
-
-  // Ghosts with readable speed and behavior
-  function mkGhost(name, x,y, color, speed){
-    return { name, x,y, px:x, py:y, vx:0, vy:0, color, speed, acc:0 };
-  }
-  const ghosts = [
-    mkGhost("SMOG",   17, 12, "#7CFFB5", 3.10),
-    mkGhost("SIREN",  18, 12, "#FFD66B", 3.30),
-    mkGhost("HEAT",   16, 12, "#FF6B87", 3.05),
-    mkGhost("STRESS", 19, 12, "#7FB1FF", 3.45),
+  // EAST: more “industrial/job” cluster (Wages), still looped, faster routes to Metro
+  const eastLines=[
+    "###################################",
+    "#S..A.....A...#.......#...A.....S.#",
+    "#.###.#####.###.#####.###.#####.###",
+    "#.O..#.....#.....#.....#.....#..O.#",
+    "#.###.###.#####.###.#####.###.###.#",
+    "#.....#...#...#.....#...#...#.....#",
+    "###.###.###.#.#######.#.###.###.###",
+    "#...#.....#.#...#...#.#.....#.....#",
+    "#.###.###.#.###.#.###.#.###.###.###",
+    "#.....#...#.....#.....#...#.....#.#",
+    "###.###.#########.#########.###.###",
+    "#...W.#.....W.....#.....W.....#.W.#",
+    "#.###.###.###.###.#.###.###.###.###",
+    "#...#...#.#.....#.#.....#...#.....#",
+    "###.###.#.#.###.#.#.###.#.###.###.#",
+    "#.....#.#.#.#...#.#...#.#.#.....#.#",
+    "#.###.#.#.#.#.###.###.#.#.#.###.#.#",
+    "#...#.#...#.#.....#...#...#...#...#",
+    "#.###.#####.#######.#####.#####.###",
+    "#.....#.....#.....#.....#.....#...#",
+    "###.###.###.#.###.#.###.#.###.###.#",
+    "#.....#...#.#...#.#...#.#...#.....#",
+    "#.###.###.#.###.#.#.###.#.###.###.#",
+    "#..T......#.....#.....#......T..M.#",
+    "###################################",
   ];
 
-  // Pac-Man-ish chase/scatter rhythm
-  const rhythm = { t: 0, phase: "CHASE", chase: 6.0, scatter: 3.0 };
+  const west=parse(westLines);
+  const east=parse(eastLines);
 
-  function isWall(m,x,y){ return m[y] && m[y][x]===T.WALL; }
-  function canMove(m,x,y){ return x>=0 && y>=0 && x<COLS && y<ROWS && !isWall(m,x,y); }
+  function curMap(){ return (state===STATE.WEST)?west:east; }
   function tileAt(m,x,y){ return (m[y] && m[y][x]!==undefined) ? m[y][x] : T.WALL; }
+  function isWall(m,x,y){ return tileAt(m,x,y)===T.WALL; }
 
-  function inSafe(m,x,y){
-    const t = tileAt(m,x,y);
-    return t===T.SAFE || t===T.HOME;
+  // Wrap tunnels: allow x=-1 -> x=COLS-2 (inside wall border), and x=COLS -> x=1
+  function wrapX(x){
+    if(x<=0) return COLS-2;
+    if(x>=COLS-1) return 1;
+    return x;
   }
 
-  // Metro locations for teleport exit
+  function canMove(m,x,y){
+    if(y<=0 || y>=ROWS-1) return false;
+    x = wrapX(x);
+    return !isWall(m,x,y);
+  }
+
   function findTile(m, tval){
     for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(m[y][x]===tval) return {x,y};
     return {x:1,y:1};
   }
-  const westMetro = findTile(west, T.METRO);
-  const eastMetro = findTile(east, T.METRO);
-  const westHome = findTile(west, T.HOME);
+  const westHome=findTile(west,T.HOME);
+  const westMetro=findTile(west,T.METRO);
+  const eastMetro=findTile(east,T.METRO);
 
-  // Transition
-  let fade = { active:false, t:0, dur:0.45, target:null };
-  function startTransition(target){
-    fade.active=true; fade.t=0; fade.target=target;
-    sfx(320, 0.10, 0.035, "triangle", -80);
+  // Player
+  const player={
+    x: westHome.x, y: westHome.y,
+    px:0, py:0,
+    hp:100, maxHp:100,
+    speed:7.2,
+    sprintMul:1.35,
+    carried:0,
+    score:0,
+    invuln:0,
+    // power-up
+    power:{ active:false, t:0, dur:7.0 },
+    buffer:{ active:false, t:0, dur:2.0, radius:2.2 },
+    bufferCd:0,
+  };
+
+  // Ghost system: roam + chase, frightened + return-to-depot on tag
+  const depot={x:17,y:12};
+  const rhythm={ t:0, phase:"CHASE", chase:7.0, scatter:3.5 };
+
+  function mkGhost(name,color,speed,homeOffset){
+    return {
+      name,color,speed,
+      x:depot.x+homeOffset.x, y:depot.y+homeOffset.y,
+      px:0,py:0,vx:0,vy:0,acc:0,
+      mode:"CHASE",          // CHASE | SCATTER | FRIGHT | EATEN
+      eatenTimer:0
+    };
   }
-  function updateTransition(dt){
-    if(!fade.active) return;
-    fade.t += dt;
-    if(fade.t>=fade.dur){
-      fade.active=false;
-      if(fade.target===STATE.EAST){
-        state=STATE.EAST;
-        player.x = eastMetro.x+1;
-        player.y = eastMetro.y;
-      } else {
-        state=STATE.WEST;
-        player.x = westMetro.x-1;
-        player.y = westMetro.y;
-      }
-      // reset ghosts to center for clarity
-      for(const g of ghosts){ g.x=17; g.y=12; g.vx=0; g.vy=0; g.acc=0; }
-      sfx(520, 0.06, 0.04, "square", 80);
+
+  const ghosts=[
+    mkGhost("SMOG"  ,"#7CFFB5",3.10,{x:-1,y:0}),
+    mkGhost("SIREN" ,"#FFD66B",3.25,{x: 1,y:0}),
+    mkGhost("HEAT"  ,"#FF6B87",3.05,{x: 0,y:-1}),
+    mkGhost("STRESS","#7FB1FF",3.35,{x: 0,y: 1}),
+  ];
+
+  // Hazards for city feel: moving buses and ambient smog puffs
+  const buses=[
+    { laneY: 6, x: 2, dir: 1, speed: 3.2, color: PAL.bus },
+    { laneY: 18, x: COLS-3, dir: -1, speed: 3.0, color: PAL.bus2 },
+  ];
+  const smogPuffs=[]; // {x,y,r,t}
+
+  // Difficulty
+  const level={
+    dps:16,
+    regen:7.0,
+    safeRegen:2.2,
+    safeDmg:0.55,
+    powerGhostSpeedMul:0.72,
+    goalWages:3,
+  };
+  let banked=0;
+
+  function resetAll(){
+    state=STATE.WEST;
+    player.x=westHome.x; player.y=westHome.y;
+    player.hp=100; player.carried=0; player.score=0;
+    player.invuln=0;
+    player.power.active=false; player.power.t=0;
+    player.buffer.active=false; player.buffer.t=0; player.bufferCd=0;
+
+    banked=0;
+    rhythm.t=0; rhythm.phase="CHASE";
+
+    for(const g of ghosts){
+      g.x=depot.x + (Math.random()<0.5?-1:1);
+      g.y=depot.y + (Math.random()<0.5?-1:1);
+      g.vx=0; g.vy=0; g.acc=0;
+      g.mode="CHASE";
+      g.eatenTimer=0;
     }
+    smogPuffs.length=0;
   }
 
-  // Backdrop
+  // City backdrop
   let now=0;
   function drawBackdrop(side){
-    const sky = ctx.createLinearGradient(0,0,0,H);
-    if(side==="WEST"){
-      sky.addColorStop(0, PAL.westSky0);
-      sky.addColorStop(0.55, "#0B1A2E");
-      sky.addColorStop(1, PAL.bg0);
-    } else {
-      sky.addColorStop(0, PAL.eastSky0);
-      sky.addColorStop(0.55, "#0A1F3A");
-      sky.addColorStop(1, PAL.bg0);
-    }
+    const sky=ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0, side==="WEST" ? "#2B3E74" : "#234F86");
+    sky.addColorStop(0.55, side==="WEST" ? "#0B1A2E" : "#0A203A");
+    sky.addColorStop(1, "#05080E");
     ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
 
     // Andes
-    ctx.fillStyle="rgba(0,0,0,0.34)";
+    ctx.fillStyle="rgba(0,0,0,0.33)";
     ctx.beginPath();
-    ctx.moveTo(0, 150);
-    const peaks=[[90,105],[170,140],[270,100],[380,145],[500,98],[610,150],[720,105],[830,155],[980,120]];
+    ctx.moveTo(0,160);
+    const peaks=[[90,120],[170,155],[270,118],[380,165],[500,115],[610,175],[720,125],[830,180],[980,140]];
     for(const [x,y] of peaks) ctx.lineTo(x,y);
-    ctx.lineTo(W, 190); ctx.lineTo(0,190); ctx.closePath();
+    ctx.lineTo(W,210); ctx.lineTo(0,210); ctx.closePath();
     ctx.fill();
 
     // Skyline
-    const baseY = 200;
-    const towers = side==="WEST" ? 44 : 52;
-    for(let i=0;i<towers;i++){
-      const bw = Math.floor(rand(12, 30));
-      const bh = Math.floor(rand(18, side==="WEST" ? 80 : 150));
-      const bx = Math.floor(rand(-20, W+20));
-      ctx.fillStyle = side==="WEST" ? "rgba(0,0,0,0.23)" : "rgba(0,0,0,0.19)";
+    const baseY=220;
+    const n=54;
+    for(let i=0;i<n;i++){
+      const bw=Math.floor(rand(10,28));
+      const bh=Math.floor(rand(18, side==="WEST"?85:150));
+      const bx=Math.floor(rand(-20,W+20));
+      ctx.fillStyle=side==="WEST" ? "rgba(0,0,0,0.23)" : "rgba(0,0,0,0.19)";
       ctx.fillRect(bx, baseY-bh, bw, bh);
-      if(side==="EAST" && Math.random()<0.20){
+      if(side==="EAST" && Math.random()<0.18){
         ctx.fillStyle="rgba(232,241,255,0.06)";
         ctx.fillRect(bx+2, baseY-bh+8, 2, bh-14);
       }
     }
 
-    // Smog band
-    const smogA = side==="WEST" ? 0.20 : 0.10;
+    // Smog band (west heavier)
+    const a = side==="WEST" ? 0.20 : 0.10;
     ctx.save();
-    ctx.globalAlpha = smogA;
+    ctx.globalAlpha=a;
     ctx.fillStyle="#D7FFD9";
-    ctx.fillRect(0, 165, W, 70);
-    ctx.globalAlpha = smogA*0.75;
-    for(let i=0;i<44;i++){
-      const x=(i*36 + (now*22))%W;
-      const y=175 + (i%6)*7;
+    ctx.fillRect(0,185,W,70);
+    ctx.globalAlpha=a*0.75;
+    for(let i=0;i<40;i++){
+      const x=(i*40 + (now*18))%W;
+      const y=195 + (i%6)*7;
       ctx.beginPath();
-      ctx.arc(x, y, 18 + (i%4)*8, 0, Math.PI*2);
+      ctx.arc(x,y, 18+(i%4)*8, 0, Math.PI*2);
       ctx.fill();
     }
     ctx.restore();
   }
 
-  // Tiles rendering: neon walls with thickness
+  // Tile art: colorful “city feel”
   function drawTile(m,x,y){
     const t=tileAt(m,x,y);
     const gx=x*TILE, gy=y*TILE;
 
-    // floor
+    // floor as pavement
     ctx.fillStyle = (state===STATE.WEST) ? PAL.westFloor : PAL.eastFloor;
     ctx.fillRect(gx,gy,TILE,TILE);
 
-    // subtle floor speckle
-    ctx.fillStyle="rgba(232,241,255,0.05)";
-    if((x+y)%5===0) ctx.fillRect(gx+Math.floor((x*7+y*3)%TILE), gy+Math.floor((x*5+y*11)%TILE), 1, 1);
+    // subtle crosshatch
+    ctx.fillStyle="rgba(232,241,255,0.04)";
+    if((x+y)%3===0) ctx.fillRect(gx+((x*7+y*3)%TILE|0), gy+((x*5+y*11)%TILE|0), 1, 1);
 
     if(t===T.WALL){
       const wall = (state===STATE.WEST) ? PAL.westWall : PAL.eastWall;
       ctx.fillStyle=wall;
       ctx.fillRect(gx,gy,TILE,TILE);
 
-      // thicker bevel
+      // bevel
       ctx.fillStyle="rgba(255,255,255,0.10)";
-      ctx.fillRect(gx+2, gy+2, TILE-4, 2);
-      ctx.fillRect(gx+2, gy+2, 2, TILE-4);
+      ctx.fillRect(gx+2,gy+2,TILE-4,2);
+      ctx.fillRect(gx+2,gy+2,2,TILE-4);
       ctx.fillStyle="rgba(0,0,0,0.26)";
-      ctx.fillRect(gx+2, gy+TILE-4, TILE-4, 2);
-      ctx.fillRect(gx+TILE-4, gy+2, 2, TILE-4);
+      ctx.fillRect(gx+2,gy+TILE-4,TILE-4,2);
+      ctx.fillRect(gx+TILE-4,gy+2,2,TILE-4);
 
-      // neon outline glow at edges where adjacent is floor
+      // neon edge if adjacent is floor
       ctx.save();
       ctx.globalAlpha=0.20;
       ctx.strokeStyle="rgba(127,177,255,0.35)";
       ctx.lineWidth=2;
       ctx.beginPath();
-      if(!isWall(m,x,y-1)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+TILE-3,gy+3); }
-      if(!isWall(m,x,y+1)) { ctx.moveTo(gx+3,gy+TILE-3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
-      if(!isWall(m,x-1,y)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+3,gy+TILE-3); }
-      if(!isWall(m,x+1,y)) { ctx.moveTo(gx+TILE-3,gy+3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
+      if(!isWall(m,wrapX(x),y-1)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+TILE-3,gy+3); }
+      if(!isWall(m,wrapX(x),y+1)) { ctx.moveTo(gx+3,gy+TILE-3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
+      if(!isWall(m,wrapX(x-1),y)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+3,gy+TILE-3); }
+      if(!isWall(m,wrapX(x+1),y)) { ctx.moveTo(gx+TILE-3,gy+3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
       ctx.stroke();
       ctx.restore();
       return;
     }
 
     if(t===T.DOT){
+      ctx.save();
+      ctx.globalAlpha=0.88;
       ctx.fillStyle=PAL.dot;
-      ctx.globalAlpha=0.85;
       ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+TILE/2, 2.2, 0, Math.PI*2);
+      ctx.arc(gx+TILE/2, gy+TILE/2, 2.1, 0, Math.PI*2);
       ctx.fill();
-      ctx.globalAlpha=1;
+      ctx.restore();
       return;
     }
 
     if(t===T.WAGE){
       ctx.save();
-      ctx.globalAlpha=0.18;
+      ctx.globalAlpha=0.20;
       ctx.fillStyle=PAL.wage;
       ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
       ctx.globalAlpha=0.95;
@@ -467,35 +451,24 @@
       return;
     }
 
-    if(t===T.FRIEND){
+    if(t===T.SUPPORT){
+      // Big “power pellet” (friends/family)
       ctx.save();
+      const pulse=0.55+0.45*Math.sin(now*5.0);
       ctx.globalAlpha=0.18;
-      ctx.fillStyle=PAL.friend;
-      ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
+      ctx.fillStyle=PAL.support;
+      ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
       ctx.globalAlpha=0.95;
-      ctx.fillStyle=PAL.friend;
-      // pixel heart
-      const pxl=(xx,yy)=>ctx.fillRect(gx+xx, gy+yy, 2, 2);
-      pxl(9,9); pxl(11,9); pxl(15,9); pxl(17,9);
-      pxl(7,11); pxl(13,11); pxl(19,11);
-      pxl(9,13); pxl(11,13); pxl(15,13); pxl(17,13);
-      pxl(11,15); pxl(15,15);
-      pxl(13,17);
-      ctx.restore();
-      return;
-    }
-
-    if(t===T.TREE){
-      ctx.save();
-      ctx.globalAlpha=0.18;
-      ctx.fillStyle=PAL.tree;
-      ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
-      ctx.globalAlpha=0.90;
-      ctx.fillStyle=PAL.tree;
+      ctx.fillStyle=PAL.support;
       ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+12, 7.2, 0, Math.PI*2);
+      ctx.arc(gx+TILE/2, gy+TILE/2, 7.8 + 1.2*pulse, 0, Math.PI*2);
       ctx.fill();
-      ctx.fillRect(gx+TILE/2-1, gy+15, 2, 10);
+      ctx.globalAlpha=0.28;
+      ctx.strokeStyle="rgba(232,241,255,0.35)";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(gx+TILE/2, gy+TILE/2, 10.5 + 1.2*pulse, 0, Math.PI*2);
+      ctx.stroke();
       ctx.restore();
       return;
     }
@@ -515,13 +488,26 @@
       return;
     }
 
-    if(t===T.HOME){
+    if(t===T.TREE){
+      ctx.save();
+      ctx.globalAlpha=0.16;
+      ctx.fillStyle=PAL.tree;
+      ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
+      ctx.globalAlpha=0.90;
+      ctx.fillStyle=PAL.tree;
+      ctx.beginPath(); ctx.arc(gx+TILE/2, gy+12, 7.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(gx+TILE/2-1, gy+15, 2, 10);
+      ctx.restore();
+      return;
+    }
+
+    if(t===T.HOUSE || t===T.HOME){
       ctx.save();
       ctx.globalAlpha=0.14;
-      ctx.fillStyle="#E8F1FF";
+      ctx.fillStyle=(t===T.HOME) ? "#E8F1FF" : PAL.house;
       ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
       ctx.globalAlpha=0.92;
-      ctx.fillStyle="#E8F1FF";
+      ctx.fillStyle=(t===T.HOME) ? "#E8F1FF" : PAL.house;
       // house icon
       ctx.fillRect(gx+9, gy+15, 10, 9);
       ctx.beginPath();
@@ -530,6 +516,18 @@
       ctx.lineTo(gx+20, gy+15);
       ctx.closePath();
       ctx.fill();
+
+      if(t===T.HOME){
+        ctx.globalAlpha=0.9;
+        ctx.fillStyle="rgba(7,12,18,0.65)";
+        rr(gx-6, gy-12, TILE+12, 16, 8); ctx.fill();
+        ctx.globalAlpha=0.9;
+        ctx.fillStyle="#E8F1FF";
+        ctx.font="bold 11px ui-monospace, monospace";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("BANK", gx+TILE/2, gy-4);
+      }
+
       ctx.restore();
       return;
     }
@@ -537,7 +535,9 @@
 
   function drawMap(){
     const m=curMap();
-    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) drawTile(m,x,y);
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++) drawTile(m,x,y);
+    }
   }
 
   function drawMetroOverlay(){
@@ -547,31 +547,25 @@
       const gx=x*TILE, gy=y*TILE;
       const cx=gx+TILE/2, cy=gy+TILE/2;
 
-      // portal glow
-      const pulse = 0.55 + 0.45*Math.sin(now*5.0);
+      const pulse=0.55+0.45*Math.sin(now*5.2);
       ctx.save();
-      ctx.globalAlpha = 0.20 + 0.10*pulse;
-      ctx.fillStyle = "rgba(127,177,255,0.65)";
-      ctx.beginPath(); ctx.arc(cx, cy, 18, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.20+0.10*pulse;
+      ctx.fillStyle="rgba(127,177,255,0.65)";
+      ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.fill();
 
-      // station plate
       ctx.globalAlpha=1;
       ctx.fillStyle="rgba(7,12,18,0.82)";
-      drawRounded(gx-16, gy-10, TILE+32, TILE+22, 12);
-      ctx.fill();
+      rr(gx-16, gy-10, TILE+32, TILE+22, 12); ctx.fill();
       ctx.strokeStyle="rgba(127,177,255,0.65)";
       ctx.lineWidth=2; ctx.stroke();
 
-      // sign
       ctx.fillStyle="rgba(127,177,255,0.22)";
-      drawRounded(gx-10, gy-8, TILE+20, 18, 10);
-      ctx.fill();
+      rr(gx-10, gy-8, TILE+20, 18, 10); ctx.fill();
       ctx.fillStyle="#E8F1FF";
       ctx.font="bold 12px ui-monospace, monospace";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText("METRO", cx, gy+2);
 
-      // direction arrow
       ctx.globalAlpha=0.90;
       ctx.fillStyle="rgba(255,214,107,0.95)";
       ctx.beginPath();
@@ -586,81 +580,72 @@
       }
       ctx.closePath(); ctx.fill();
 
-      // prompt if player is on it
-      if(player.x===x && player.y===y && !fade.active){
+      // prompt
+      if(player.x===x && player.y===y){
         ctx.globalAlpha=0.95;
         ctx.fillStyle="rgba(7,12,18,0.80)";
-        drawRounded(cx-94, cy+26, 188, 22, 10); ctx.fill();
+        rr(cx-110, cy+26, 220, 22, 10); ctx.fill();
         ctx.strokeStyle="rgba(232,241,255,0.18)"; ctx.stroke();
         ctx.fillStyle="#E8F1FF";
         ctx.font="12px ui-monospace, monospace";
-        ctx.fillText("ENTER METRO", cx, cy+37);
+        ctx.fillText("RIDE METRO (auto)", cx, cy+37);
       }
 
       ctx.restore();
     }
   }
 
-  function drawHazards(){
-    // Smog puffs are the floating circles the player asked about
+  function drawBus(bus){
+    // bus is a moving obstacle/life texture; does NOT block player yet (visual + exposure)
+    const x=bus.x*TILE, y=bus.laneY*TILE;
     ctx.save();
-    for(const s of hazards.smog){
-      const a = clamp(s.t/3.2,0,1) * 0.16;
-      ctx.globalAlpha=a;
-      ctx.fillStyle="#D7FFD9";
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-      ctx.fill();
-    }
-    // Canopy shields
-    for(const g of hazards.canopy){
-      const a = clamp(g.t/3.0,0,1) * 0.14;
-      ctx.globalAlpha=a;
-      ctx.fillStyle="#7CFFB5";
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalAlpha=a*1.2;
-      ctx.strokeStyle="rgba(232,241,255,0.30)";
-      ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r, 0, Math.PI*2);
-      ctx.stroke();
-    }
+    ctx.globalAlpha=0.90;
+    ctx.fillStyle="rgba(0,0,0,0.30)";
+    ctx.beginPath();
+    ctx.ellipse(x+TILE/2, y+TILE/2+10, 16, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle=bus.color;
+    rr(x-10, y+6, TILE+20, TILE-12, 10); ctx.fill();
+    ctx.globalAlpha=0.20;
+    ctx.fillStyle="#FFF";
+    rr(x-6, y+10, TILE+12, 10, 6); ctx.fill();
+    ctx.globalAlpha=0.90;
+    ctx.fillStyle="#111";
+    ctx.fillRect(x-2, y+TILE-10, 6, 4);
+    ctx.fillRect(x+TILE-4, y+TILE-10, 6, 4);
     ctx.restore();
   }
 
-  // Sprites
   function drawPlayer(){
     const x=player.px, y=player.py;
     const pulse=0.70+0.30*Math.sin(now*9);
 
     ctx.save();
-    // shadow
     ctx.globalAlpha=0.22;
     ctx.fillStyle="#000";
     ctx.beginPath();
     ctx.ellipse(x+TILE/2, y+TILE/2+10, 12, 4.6, 0, 0, Math.PI*2);
     ctx.fill();
 
-    // body
     ctx.globalAlpha=0.95;
     ctx.fillStyle="rgba(59,228,197,0.95)";
-    drawRounded(x+5, y+5, TILE-10, TILE-10, 10);
-    ctx.fill();
+    rr(x+5, y+5, TILE-10, TILE-10, 10); ctx.fill();
 
-    // inner highlight
-    ctx.globalAlpha=0.16 + 0.10*pulse;
-    ctx.fillStyle="#FFFFFF";
-    drawRounded(x+9, y+8, TILE-18, TILE-18, 10);
-    ctx.fill();
+    ctx.globalAlpha=0.16+0.10*pulse;
+    ctx.fillStyle="#FFF";
+    rr(x+9, y+8, TILE-18, TILE-18, 10); ctx.fill();
 
-    // support aura
-    if(player.support.active){
-      const r=44 + 6*Math.sin(now*4.6);
-      ctx.globalAlpha=0.12;
-      ctx.fillStyle="#7CFFB5";
-      ctx.beginPath(); ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2); ctx.fill();
+    // power aura
+    if(player.power.active){
+      const r=52+7*Math.sin(now*5);
+      ctx.globalAlpha=0.11;
+      ctx.fillStyle=PAL.support;
+      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.18;
+      ctx.strokeStyle="rgba(232,241,255,0.30)";
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.stroke();
     }
 
     // buffer ring
@@ -668,16 +653,16 @@
       const r=player.buffer.radius*TILE;
       ctx.globalAlpha=0.10;
       ctx.fillStyle="#66D6FF";
-      ctx.beginPath(); ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=0.22;
       ctx.strokeStyle="rgba(232,241,255,0.35)";
       ctx.lineWidth=2;
-      ctx.beginPath(); ctx.arc(x+TILE/2, y+TILE/2, r, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.stroke();
     }
 
-    // grace blink
-    if(player.dmgGrace>0){
-      ctx.globalAlpha=0.35 + 0.35*Math.sin(now*24);
+    // invuln blink
+    if(player.invuln>0){
+      ctx.globalAlpha=0.35+0.35*Math.sin(now*24);
       ctx.fillStyle="#E8F1FF";
       ctx.fillRect(x+TILE/2-1, y+2, 2, 6);
     }
@@ -689,6 +674,9 @@
     const x=g.px, y=g.py;
     ctx.save();
 
+    const frightened = (g.mode==="FRIGHT");
+    const eaten = (g.mode==="EATEN");
+
     // shadow
     ctx.globalAlpha=0.20;
     ctx.fillStyle="#000";
@@ -696,20 +684,11 @@
     ctx.ellipse(x+TILE/2, y+TILE/2+10, 12, 4.6, 0, 0, Math.PI*2);
     ctx.fill();
 
-    // outline
-    ctx.globalAlpha=0.95;
-    ctx.fillStyle="rgba(0,0,0,0.35)";
-    drawRounded(x+4, y+5, TILE-8, TILE-8, 12);
-    ctx.fill();
-
     // body
     ctx.globalAlpha=0.98;
-    ctx.fillStyle=g.color;
-    drawRounded(x+5, y+6, TILE-10, TILE-10, 12);
-    ctx.fill();
+    ctx.fillStyle = eaten ? "rgba(232,241,255,0.35)" : frightened ? "rgba(232,241,255,0.75)" : g.color;
 
-    // wavy bottom
-    ctx.globalAlpha=0.95;
+    rr(x+5, y+6, TILE-10, TILE-10, 12); ctx.fill();
     ctx.fillRect(x+5, y+TILE-9, TILE-10, 6);
     ctx.globalCompositeOperation="destination-out";
     ctx.fillRect(x+8, y+TILE-5, 4, 2);
@@ -723,10 +702,10 @@
     ctx.beginPath(); ctx.arc(x+TILE/2-6, y+TILE/2-1, 3.4, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(x+TILE/2+6, y+TILE/2-1, 3.4, 0, Math.PI*2); ctx.fill();
 
-    const pxo = clamp(g.vx*1.2, -1.2, 1.2);
-    const pyo = clamp(g.vy*1.2, -1.2, 1.2);
+    const pxo=clamp(g.vx*1.2,-1.2,1.2);
+    const pyo=clamp(g.vy*1.2,-1.2,1.2);
     ctx.globalAlpha=0.85;
-    ctx.fillStyle="#E8F1FF";
+    ctx.fillStyle= frightened ? "#0B1A2E" : "#E8F1FF";
     ctx.beginPath(); ctx.arc(x+TILE/2-6+pxo, y+TILE/2-1+pyo, 1.5, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(x+TILE/2+6+pxo, y+TILE/2-1+pyo, 1.5, 0, Math.PI*2); ctx.fill();
 
@@ -735,107 +714,85 @@
 
   function drawHUD(){
     ctx.save();
-    ctx.fillStyle="rgba(6,10,16,0.62)";
-    ctx.fillRect(0,0,W,64);
+    ctx.fillStyle="rgba(5,8,14,0.66)";
+    ctx.fillRect(0,0,W,70);
 
+    const side=(state===STATE.WEST)?"WEST (Home)":"EAST (Work)";
     ctx.fillStyle=PAL.ui;
     ctx.font="16px ui-monospace, monospace";
     ctx.textBaseline="middle";
-    const side = (state===STATE.WEST) ? "WEST" : "EAST";
     ctx.fillText(`SANTIAGO METRO ESCAPE  |  LEVEL 1  |  ${side}`, 14, 18);
 
     ctx.fillStyle=PAL.uiDim;
     ctx.font="13px ui-monospace, monospace";
-    ctx.fillText(`Goal: Deliver ${level.bankGoal} wages per cycle. Carried: ${player.coins}`, 14, 42);
+    ctx.fillText(`Goal: Deliver ${level.goalWages} wages. Carried: ${player.carried}  |  Banked this cycle: ${banked}`, 14, 44);
 
-    // Health bar
-    const hbX=520, hbY=14, hbW=240, hbH=18;
+    // health bar
+    const hbX=520, hbY=16, hbW=240, hbH=18;
     ctx.strokeStyle="rgba(232,241,255,0.20)";
     ctx.lineWidth=2;
-    drawRounded(hbX,hbY,hbW,hbH,9);
-    ctx.stroke();
-
-    const p = clamp(player.hp/player.maxHp,0,1);
+    rr(hbX,hbY,hbW,hbH,9); ctx.stroke();
+    const p=clamp(player.hp/player.maxHp,0,1);
     ctx.fillStyle = p>0.6 ? "rgba(59,228,197,0.95)" : p>0.3 ? "rgba(255,214,107,0.95)" : "rgba(255,77,109,0.95)";
-    drawRounded(hbX+2,hbY+2,(hbW-4)*p,hbH-4,8);
-    ctx.fill();
-
+    rr(hbX+2,hbY+2,(hbW-4)*p,hbH-4,8); ctx.fill();
     ctx.fillStyle=PAL.uiDim;
     ctx.fillText("Allostatic Load", hbX+4, hbY+hbH+16);
 
-    // Buffer + support status
+    // power status
     ctx.fillStyle=PAL.ui;
     ctx.font="14px ui-monospace, monospace";
-    ctx.fillText(`Buffer CD: ${Math.max(0,player.bufferCd).toFixed(1)}s`, 790, 18);
+    const powLeft = player.power.active ? `${Math.ceil(player.power.dur-player.power.t)}s` : "none";
+    ctx.fillText(`Support power: ${powLeft}`, 790, 18);
 
-    if(player.support.active){
-      const left = Math.max(0, Math.ceil(player.support.dur - player.support.t));
-      ctx.fillStyle="rgba(124,255,181,0.90)";
-      ctx.fillText(`Support: ${left}s`, 790, 40);
-    } else {
-      ctx.fillStyle=PAL.uiDim;
-      ctx.fillText(`Support: none`, 790, 40);
-    }
+    const bufLeft = Math.max(0, player.bufferCd).toFixed(1);
+    ctx.fillStyle=PAL.uiDim;
+    ctx.fillText(`Buffer CD: ${bufLeft}s`, 790, 44);
 
     ctx.restore();
   }
 
-  function drawHelpOverlay(){
+  function drawHelp(){
     if(!showHelp) return;
-
-    const bw=820, bh=360;
+    const bw=850, bh=340;
     const x=(W-bw)/2, y=(H-bh)/2;
-
     ctx.save();
     ctx.fillStyle="rgba(7,12,18,0.78)";
-    drawRounded(x,y,bw,bh,16);
-    ctx.fill();
+    rr(x,y,bw,bh,16); ctx.fill();
     ctx.strokeStyle="rgba(232,241,255,0.20)";
     ctx.lineWidth=2; ctx.stroke();
 
     ctx.fillStyle="#E8F1FF";
     ctx.font="28px ui-monospace, monospace";
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText("What is happening?", W/2, y+44);
+    ctx.fillText("How to play", W/2, y+42);
 
     ctx.fillStyle="rgba(232,241,255,0.78)";
     ctx.font="15px ui-monospace, monospace";
     ctx.textAlign="left"; ctx.textBaseline="top";
-
-    const lines = [
-      "You commute across Santiago to earn wages and bring them home.",
+    const lines=[
+      "You commute between WEST (home) and EAST (work) through the METRO.",
+      "Pick up WAGES (gold) in the EAST and bring them to the BANK at HOME.",
       "",
-      "Health bar = Allostatic Load (stress on the brain).",
-      "Ghosts chase you. Contact drains health (but you get a fair grace window).",
+      "Ghosts = stressors. Touching them drains health (allostatic load).",
+      "Support power (big green pellet) frightens ghosts for a few seconds.",
+      "While frightened, touching a ghost sends it back to the depot to respawn.",
       "",
-      "Pickups:",
-      "  • WAGE (gold)  : collect in the East, deliver to HOME/BANK in the West",
-      "  • FRIEND (green): Support Aura, reduces damage and boosts recovery",
-      "  • TREE (cyan)  : Creates a canopy bubble that reduces exposure for a moment",
-      "  • DOT (white)  : Small points, helps guide routes",
+      "Dots are route points. Safe circles heal fast. Trees/houses add city texture.",
+      "Buses move through the city and increase exposure when you stand near them.",
       "",
-      "Safe Places (green ring) regenerate you quickly.",
-      "Metro entrance is labeled METRO. Step onto it to travel between West and East.",
-      "",
-      "Controls: Move (WASD/Arrows) • Buffer (Space) • Sprint (Shift) • Toggle Help (H)"
+      "Press H to toggle this overlay."
     ];
-
-    let yy=y+82, xx=x+34;
-    for(const ln of lines){
-      ctx.fillText(ln, xx, yy);
-      yy += (ln==="" ? 14 : 22);
-    }
-
+    let yy=y+78, xx=x+36;
+    for(const ln of lines){ ctx.fillText(ln, xx, yy); yy+=22; }
     ctx.fillStyle="rgba(255,214,107,0.90)";
     ctx.textAlign="center";
-    ctx.fillText("Press H to close this overlay", W/2, y+bh-26);
-
+    ctx.fillText("Press H to close", W/2, y+bh-24);
     ctx.restore();
   }
 
   function drawScanlines(){
     ctx.save();
-    ctx.globalAlpha=0.14;
+    ctx.globalAlpha=0.13;
     for(let y=0;y<H;y+=3){
       ctx.fillStyle="rgba(0,0,0,0.35)";
       ctx.fillRect(0,y,W,1);
@@ -843,31 +800,12 @@
     ctx.restore();
   }
 
-  function drawFade(){
-    if(!fade.active) return;
-    const p=clamp(fade.t/fade.dur,0,1);
-    const a=p<0.5? p*2 : (1-p)*2;
-
-    ctx.save();
-    ctx.globalAlpha=0.58 + a*0.35;
-    ctx.fillStyle="#000";
-    ctx.fillRect(0,0,W,H);
-
-    // tunnel streaks
-    ctx.globalAlpha=0.85;
-    ctx.fillStyle="rgba(127,177,255,0.30)";
-    for(let i=0;i<44;i++){
-      ctx.fillRect((i*30 + (now*140))%W, 330 + (i%6)*10, 20, 3);
-    }
-    ctx.restore();
-  }
-
-  function overlayBox(title, lines){
+  function overlay(title, lines){
     ctx.save();
     const bw=760, bh=320;
     const x=(W-bw)/2, y=(H-bh)/2;
     ctx.fillStyle="rgba(7,12,18,0.78)";
-    drawRounded(x,y,bw,bh,16); ctx.fill();
+    rr(x,y,bw,bh,16); ctx.fill();
     ctx.strokeStyle="rgba(232,241,255,0.20)";
     ctx.lineWidth=2; ctx.stroke();
 
@@ -883,49 +821,69 @@
     ctx.restore();
   }
 
-  // Game logic: pickups, damage, movement
+  // Pickups & metro
   function handlePickups(){
     const m=curMap();
-    const t = tileAt(m, player.x, player.y);
+    const tx=wrapX(player.x);
+    const t=tileAt(m,tx,player.y);
 
     if(t===T.DOT){
-      m[player.y][player.x]=T.FLOOR;
+      m[player.y][tx]=T.FLOOR;
       player.score += 2;
       sfx(720, 0.03, 0.020, "square", 60);
     }
 
     if(t===T.WAGE){
-      m[player.y][player.x]=T.FLOOR;
-      player.coins += 1;
+      m[player.y][tx]=T.FLOOR;
+      player.carried += 1;
       player.score += 40;
       sfx(920, 0.05, 0.04, "square", 80);
     }
 
-    if(t===T.FRIEND){
-      m[player.y][player.x]=T.FLOOR;
-      player.support.active=true;
-      player.support.t=0;
-      sfx(660, 0.08, 0.04, "triangle", 0);
-      sfx(980, 0.05, 0.03, "square", 0);
+    if(t===T.SUPPORT){
+      m[player.y][tx]=T.FLOOR;
+      player.power.active=true;
+      player.power.t=0;
+      // frighten all ghosts
+      for(const g of ghosts){
+        if(g.mode!=="EATEN") g.mode="FRIGHT";
+      }
+      sfx(660, 0.10, 0.05, "triangle", 0);
+      sfx(980, 0.06, 0.04, "square", 0);
     }
 
-    if(t===T.TREE){
-      m[player.y][player.x]=T.FLOOR;
-      // canopy bubble at player position (screen space)
-      hazards.canopy.push({ x: player.px + TILE/2, y: player.py + TILE/2, r: 54, t: 3.0 });
-      sfx(520, 0.08, 0.035, "triangle", 0);
+    if(t===T.METRO){
+      // immediate travel
+      if(state===STATE.WEST){
+        state=STATE.EAST;
+        player.x = eastMetro.x-1;
+        player.y = eastMetro.y;
+      } else {
+        state=STATE.WEST;
+        player.x = westMetro.x+1;
+        player.y = westMetro.y;
+      }
+      // ghosts keep chasing but reposition slightly so transition is readable
+      for(const g of ghosts){
+        g.x = depot.x + (Math.random()<0.5?-2:2);
+        g.y = depot.y + (Math.random()<0.5?-1:1);
+        g.vx=0; g.vy=0; g.acc=0;
+        if(g.mode==="EATEN") g.mode="CHASE";
+      }
+      sfx(320, 0.08, 0.04, "triangle", -60);
+      sfx(520, 0.06, 0.04, "square", 60);
     }
 
-    // bank at HOME in west
-    if(state===STATE.WEST && t===T.HOME && player.coins>0){
-      player.banked += player.coins;
-      player.score += player.coins * 80;
-      player.coins = 0;
+    // Bank at home
+    if(state===STATE.WEST && t===T.HOME && player.carried>0){
+      banked += player.carried;
+      player.score += player.carried*80;
+      player.carried=0;
 
-      if(player.banked >= level.bankGoal){
-        player.score += 300;
-        player.banked = 0;
-        sfx(740, 0.08, 0.05, "square", 90);
+      if(banked>=level.goalWages){
+        player.score += 350;
+        banked=0;
+        sfx(740, 0.09, 0.05, "square", 90);
         sfx(520, 0.12, 0.05, "triangle", 0);
       } else {
         sfx(520, 0.08, 0.04, "triangle", 0);
@@ -933,64 +891,64 @@
     }
   }
 
-  function handleAbilities(dt){
-    if(keys.has("m")){
-      keys.delete("m");
-      muted=!muted;
-      sfx(muted?160:760, 0.06, 0.05, "square", 0);
-    }
-    if(keys.has("h")){
-      keys.delete("h");
-      showHelp = !showHelp;
-      sfx(620, 0.04, 0.03, "square", showHelp ? 40 : -40);
-    }
+  // Abilities and toggles
+  function handleControls(dt){
+    if(keys.has("m")){ keys.delete("m"); muted=!muted; sfx(muted?160:760,0.06,0.05,"square",0); }
+    if(keys.has("h")){ keys.delete("h"); showHelp=!showHelp; sfx(620,0.04,0.03,"square", showHelp?40:-40); }
+
     if(keys.has("enter")){
       keys.delete("enter");
       if(state===STATE.TITLE){
         state=STATE.WEST;
+        showHelp=false;
         try{ ensureAudio(); }catch{}
       } else if(state===STATE.GAMEOVER){
-        resetRun();
+        resetAll();
         state=STATE.WEST;
+        showHelp=false;
       }
     }
 
+    // Buffer (minor damage reduction)
     player.bufferCd -= dt;
     if(player.buffer.active){
       player.buffer.t += dt;
       if(player.buffer.t>=player.buffer.dur) player.buffer.active=false;
     }
-    if(keys.has("space") && player.bufferCd<=0 && (state===STATE.WEST || state===STATE.EAST)){
+    if(keys.has("space") && player.bufferCd<=0 && (state===STATE.WEST||state===STATE.EAST)){
       keys.delete("space");
-      player.buffer.active=true;
-      player.buffer.t=0;
+      player.buffer.active=true; player.buffer.t=0;
       player.bufferCd=4.0;
-      sfx(640, 0.08, 0.04, "triangle", 0);
-      sfx(980, 0.04, 0.03, "square", 0);
+      sfx(640,0.08,0.04,"triangle",0);
+      sfx(980,0.04,0.03,"square",0);
     }
 
-    if(player.support.active){
-      player.support.t += dt;
-      if(player.support.t >= player.support.dur) player.support.active=false;
-    }
+    if(player.invuln>0) player.invuln -= dt;
 
-    if(player.dmgGrace>0) player.dmgGrace -= dt;
+    // Power timer
+    if(player.power.active){
+      player.power.t += dt;
+      if(player.power.t >= player.power.dur){
+        player.power.active=false;
+        // ghosts revert to chase if not eaten
+        for(const g of ghosts){
+          if(g.mode==="FRIGHT") g.mode="CHASE";
+        }
+      }
+    }
   }
 
-  // Movement
+  // Movement: grid-stepped with wrap tunnels
   let moveAcc=0;
   function updatePlayer(dt){
     const m=curMap();
-    const sprinting = keys.has("shift");
-    const spd = player.speed * (sprinting ? player.sprintMul : 1);
+    const sprint = keys.has("shift");
+    const spd = player.speed * (sprint ? player.sprintMul : 1);
+    if(sprint) player.hp -= dt*0.9;
 
-    if(sprinting && (state===STATE.WEST || state===STATE.EAST)){
-      player.hp -= dt * 1.0;
-    }
+    moveAcc += dt*spd;
 
-    moveAcc += dt * spd;
-
-    let dx=0, dy=0;
+    let dx=0,dy=0;
     if(keys.has("arrowleft")||keys.has("a")) dx=-1;
     else if(keys.has("arrowright")||keys.has("d")) dx=1;
     else if(keys.has("arrowup")||keys.has("w")) dy=-1;
@@ -998,18 +956,16 @@
 
     while(moveAcc>=1){
       moveAcc -= 1;
-      const nx=player.x+dx, ny=player.y+dy;
+      let nx=player.x+dx, ny=player.y+dy;
+
+      // wrap only horizontally
+      nx = wrapX(nx);
+
       if((dx||dy) && canMove(m,nx,ny)){
         player.x=nx; player.y=ny;
-        if(Math.random()<0.18) sfx(210, 0.02, 0.010, "square", 0);
+        if(Math.random()<0.14) sfx(210,0.02,0.010,"square",0);
       }
-
       handlePickups();
-
-      // Metro triggers
-      if(tileAt(m, player.x, player.y)===T.METRO && !fade.active){
-        startTransition(state===STATE.WEST ? STATE.EAST : STATE.WEST);
-      }
     }
 
     player.px = player.x*TILE;
@@ -1023,47 +979,53 @@
     else if(rhythm.phase==="SCATTER" && rhythm.t>=rhythm.scatter){ rhythm.phase="CHASE"; rhythm.t=0; }
   }
 
-  function targetForGhost(g){
-    // Scatter corners
-    const corners = {
-      "SMOG": {x: 2, y: 2},
-      "SIREN": {x: COLS-3, y: 2},
-      "HEAT": {x: 2, y: ROWS-3},
-      "STRESS": {x: COLS-3, y: ROWS-3},
-    };
-    if(rhythm.phase==="SCATTER") return corners[g.name] || {x:2,y:2};
-
-    // Chase: slight personality
-    if(g.name==="SIREN") return {x: clamp(player.x + (player.x%2?2:-2), 1, COLS-2), y: player.y};
-    if(g.name==="HEAT") return (state===STATE.EAST) ? findTile(east, T.WAGE) : {x: player.x, y: player.y};
-    return {x: player.x, y: player.y};
+  function ghostTarget(g){
+    if(g.mode==="EATEN") return depot;
+    if(g.mode==="FRIGHT"){
+      // run away: target opposite of player
+      return {x: clamp(COLS-1-player.x,1,COLS-2), y: clamp(ROWS-1-player.y,1,ROWS-2)};
+    }
+    if(rhythm.phase==="SCATTER"){
+      const corners={
+        "SMOG":{x:2,y:2},
+        "SIREN":{x:COLS-3,y:2},
+        "HEAT":{x:2,y:ROWS-3},
+        "STRESS":{x:COLS-3,y:ROWS-3},
+      };
+      return corners[g.name] || {x:2,y:2};
+    }
+    // CHASE
+    if(g.name==="SIREN") return {x: clamp(player.x + (player.x%2?2:-2),1,COLS-2), y: player.y};
+    if(g.name==="HEAT") return (state===STATE.EAST) ? findTile(east,T.WAGE) : {x:player.x,y:player.y};
+    return {x:player.x,y:player.y};
   }
 
-  function chooseDir(g, m){
+  function chooseDir(g,m){
     const dirs=[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
-    const tgt = targetForGhost(g);
+    const tgt=ghostTarget(g);
     let best=null, bestScore=1e9;
 
     for(const d of dirs){
-      const nx=g.x+d.dx, ny=g.y+d.dy;
+      let nx=wrapX(g.x+d.dx);
+      const ny=g.y+d.dy;
       if(!canMove(m,nx,ny)) continue;
 
-      // avoid reversal most of the time
-      if(d.dx===-g.vx && d.dy===-g.vy && Math.random()<0.88) continue;
+      // avoid immediate reversal most of the time
+      if(d.dx===-g.vx && d.dy===-g.vy && Math.random()<0.85) continue;
 
-      const md = Math.abs(tgt.x-nx) + Math.abs(tgt.y-ny);
-      let score = md + rand(0,0.15);
+      const md=Math.abs(tgt.x-nx)+Math.abs(tgt.y-ny);
+      let score=md + rand(0,0.12);
 
-      // Siren likes going straight
-      if(g.name==="SIREN") score += (d.dx===g.vx && d.dy===g.vy) ? -0.25 : 0.08;
+      if(g.mode==="FRIGHT") score += rand(0,1.0); // wobble
+      if(g.mode==="EATEN") score *= 0.85;         // beeline
+      if(g.name==="SIREN") score += (d.dx===g.vx && d.dy===g.vy) ? -0.22 : 0.08;
 
       if(score<bestScore){ bestScore=score; best=d; }
     }
-
-    // fallback if stuck
     if(!best){
       for(const d of dirs){
-        const nx=g.x+d.dx, ny=g.y+d.dy;
+        let nx=wrapX(g.x+d.dx);
+        const ny=g.y+d.dy;
         if(canMove(m,nx,ny)){ best=d; break; }
       }
     }
@@ -1075,204 +1037,257 @@
     updateRhythm(dt);
 
     for(const g of ghosts){
-      g.acc += dt * g.speed;
-      while(g.acc >= 1){
+      // eaten respawn
+      if(g.mode==="EATEN"){
+        g.eatenTimer -= dt;
+        if(g.eatenTimer<=0){
+          g.mode="CHASE";
+          g.x=depot.x; g.y=depot.y;
+          g.vx=0; g.vy=0;
+        }
+      }
+
+      // speed changes
+      let spd=g.speed;
+      if(g.mode==="FRIGHT") spd *= level.powerGhostSpeedMul;
+      if(g.mode==="EATEN") spd *= 1.45;
+
+      g.acc += dt*spd;
+
+      while(g.acc>=1){
         g.acc -= 1;
         const d=chooseDir(g,m);
         g.vx=d.dx; g.vy=d.dy;
-        const nx=g.x+g.vx, ny=g.y+g.vy;
+
+        let nx=wrapX(g.x+g.vx);
+        const ny=g.y+g.vy;
         if(canMove(m,nx,ny)){ g.x=nx; g.y=ny; }
 
-        // Smog ghost seeds smog puffs (screen-space circles)
-        if(g.name==="SMOG" && Math.random() < (state===STATE.WEST ? 0.22 : 0.12)){
-          hazards.smog.push({
-            x: g.x*TILE + TILE/2 + rand(-6,6),
-            y: g.y*TILE + TILE/2 + rand(-6,6),
-            r: rand(18, 34),
-            t: 3.2
-          });
+        // seed smog puffs sometimes (city feel)
+        if(g.name==="SMOG" && Math.random() < (state===STATE.WEST ? 0.18 : 0.10)){
+          smogPuffs.push({ x:g.x*TILE+TILE/2+rand(-6,6), y:g.y*TILE+TILE/2+rand(-6,6), r:rand(18,30), t:2.8 });
         }
       }
-      g.px = g.x*TILE;
-      g.py = g.y*TILE;
+
+      g.px=g.x*TILE;
+      g.py=g.y*TILE;
     }
   }
 
-  function updateHazards(dt){
-    for(let i=hazards.smog.length-1;i>=0;i--){
-      hazards.smog[i].t -= dt;
-      if(hazards.smog[i].t<=0) hazards.smog.splice(i,1);
-    }
-    for(let i=hazards.canopy.length-1;i>=0;i--){
-      hazards.canopy[i].t -= dt;
-      if(hazards.canopy[i].t<=0) hazards.canopy.splice(i,1);
-    }
-    // ambient smog on west
-    if(state===STATE.WEST && Math.random() < dt*0.28){
-      hazards.smog.push({ x: rand(0,W), y: rand(200,H), r: rand(16, 30), t: 2.8 });
+  function updateBuses(dt){
+    // buses move and add “exposure” if you stand near them
+    for(const b of buses){
+      b.x += b.dir * b.speed * dt;
+      if(b.x<=1){ b.x=1; b.dir=1; }
+      if(b.x>=COLS-2){ b.x=COLS-2; b.dir=-1; }
     }
   }
 
-  function inCanopyScreen(px,py){
-    for(const g of hazards.canopy){
-      if(dist(px,py,g.x,g.y) <= g.r) return true;
+  function updateSmog(dt){
+    for(let i=smogPuffs.length-1;i>=0;i--){
+      smogPuffs[i].t -= dt;
+      if(smogPuffs[i].t<=0) smogPuffs.splice(i,1);
     }
-    return false;
+    // ambient west smog
+    if(state===STATE.WEST && Math.random() < dt*0.25){
+      smogPuffs.push({ x:rand(0,W), y:rand(240,H), r:rand(16,28), t:2.4 });
+    }
   }
 
-  function inSmogScreen(px,py){
-    for(const s of hazards.smog){
-      if(dist(px,py,s.x,s.y) <= s.r*0.85) return true;
+  function drawSmog(){
+    ctx.save();
+    for(const s of smogPuffs){
+      const a=clamp(s.t/2.8,0,1)*0.15;
+      ctx.globalAlpha=a;
+      ctx.fillStyle="#D7FFD9";
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fill();
     }
-    return false;
+    ctx.restore();
   }
 
-  // Damage and regen: fixed and obvious
-  function applyDamageAndRegen(dt){
+  // Damage logic: ghosts chase, power-up allows “eat” ghosts
+  function applyDamage(dt){
     const m=curMap();
-    const sideMul = (state===STATE.WEST) ? level.westMul : level.eastMul;
+    const pcx=player.px+TILE/2;
+    const pcy=player.py+TILE/2;
 
-    const pcx = player.px + TILE/2;
-    const pcy = player.py + TILE/2;
+    // exposure from bus proximity
+    let busExposure=false;
+    for(const b of buses){
+      const bx=b.x*TILE+TILE/2;
+      const by=b.laneY*TILE+TILE/2;
+      if(dist(pcx,pcy,bx,by) < 48) { busExposure=true; break; }
+    }
 
-    // Collision radius (tile-based but forgiving)
-    const contactR = 14;
+    // smog exposure
+    let smog=false;
+    for(const s of smogPuffs){
+      if(dist(pcx,pcy,s.x,s.y) < s.r*0.85){ smog=true; break; }
+    }
 
-    let contact=false;
+    // safe healing zones
+    const safe = (tileAt(m,player.x,player.y)===T.SAFE) || (tileAt(m,player.x,player.y)===T.HOME);
+
+    // collision with ghosts
+    const hitR=14;
+    let hitGhost=null;
     for(const g of ghosts){
-      const gcx = g.px + TILE/2;
-      const gcy = g.py + TILE/2;
-      if(dist(pcx,pcy,gcx,gcy) <= contactR){
-        contact=true;
-        break;
-      }
+      const gcx=g.px+TILE/2, gcy=g.py+TILE/2;
+      if(dist(pcx,pcy,gcx,gcy)<=hitR){ hitGhost=g; break; }
     }
 
-    // Exposure multipliers
-    let dmgMul = 1.0;
-    if(inSmogScreen(pcx,pcy)) dmgMul *= 1.18;
-    if(inCanopyScreen(pcx,pcy)) dmgMul *= 0.82;
-    if(player.support.active) dmgMul *= 0.80;
-    if(player.buffer.active) dmgMul *= 0.82;
+    // multipliers
+    let dmgMul=1.0;
+    if(busExposure) dmgMul *= 1.15;
+    if(smog) dmgMul *= 1.18;
+    if(player.buffer.active) dmgMul *= 0.84;
+    if(safe) dmgMul *= level.safeDmg;
 
-    const safe = inSafe(m, player.x, player.y);
-    if(safe) dmgMul *= level.safeDamageMul;
+    // If powered and ghost is frightened: eat it (send back)
+    if(hitGhost && player.power.active && hitGhost.mode==="FRIGHT"){
+      hitGhost.mode="EATEN";
+      hitGhost.eatenTimer = 1.6;
+      sfx(980,0.06,0.05,"square",120);
+      player.score += 120;
+      player.invuln = 0.25;
+      return;
+    }
 
-    // If contact, apply DPS, but with a grace window after a hit so it is avoidable
-    if(contact && player.dmgGrace<=0){
-      player.hp -= (level.baseDps * sideMul * dmgMul) * dt;
-      player.dmgGrace = level.graceAfterHit;
-      sfx(240, 0.04, 0.030, "square", -30);
+    // If hit while not invuln
+    if(hitGhost && player.invuln<=0 && hitGhost.mode!=="EATEN"){
+      // small grace to avoid “stun lock”
+      player.hp -= level.dps * dmgMul * dt;
+      player.invuln = 0.38;
+      sfx(240,0.04,0.030,"square",-30);
     } else {
-      // Regen
-      const regenMul = safe ? level.safeRegenMul : 1.0;
-      const canopyMul = inCanopyScreen(pcx,pcy) ? 1.15 : 1.0;
-      const supportMul = player.support.active ? 1.20 : 1.0;
-      player.hp += level.regenPerSec * regenMul * canopyMul * supportMul * dt;
+      // regen
+      const r = safe ? level.regen * level.safeRegen : level.regen;
+      player.hp += r * dt;
     }
 
-    player.hp = clamp(player.hp, 0, player.maxHp);
+    player.hp = clamp(player.hp,0,player.maxHp);
     if(player.hp<=0){
       state=STATE.GAMEOVER;
-      sfx(110, 0.14, 0.06, "square", -55);
+      sfx(110,0.14,0.06,"square",-55);
     }
+  }
+
+  function drawMetro(){
+    const m=curMap();
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      if(tileAt(m,x,y)!==T.METRO) continue;
+      const gx=x*TILE, gy=y*TILE;
+      const cx=gx+TILE/2, cy=gy+TILE/2;
+
+      const pulse=0.55+0.45*Math.sin(now*5.1);
+      ctx.save();
+      ctx.globalAlpha=0.22+0.10*pulse;
+      ctx.fillStyle="rgba(127,177,255,0.65)";
+      ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.fill();
+
+      ctx.globalAlpha=1;
+      ctx.fillStyle="rgba(7,12,18,0.82)";
+      rr(gx-16, gy-10, TILE+32, TILE+22, 12); ctx.fill();
+      ctx.strokeStyle="rgba(127,177,255,0.65)";
+      ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle="rgba(127,177,255,0.22)";
+      rr(gx-10, gy-8, TILE+20, 18, 10); ctx.fill();
+      ctx.fillStyle="#E8F1FF";
+      ctx.font="bold 12px ui-monospace, monospace";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("METRO", cx, gy+2);
+      ctx.restore();
+    }
+  }
+
+  function drawScanlines(){
+    ctx.save();
+    ctx.globalAlpha=0.13;
+    for(let y=0;y<H;y+=3){
+      ctx.fillStyle="rgba(0,0,0,0.35)";
+      ctx.fillRect(0,y,W,1);
+    }
+    ctx.restore();
   }
 
   function updateMusic(dt){
     if(state===STATE.TITLE || state===STATE.GAMEOVER) return;
     if(!audioCtx || muted) return;
-    const spb = 60/music.bpm;
-    const stepDur = spb/4;
+    const spb=60/music.bpm;
+    const stepDur=spb/4;
     music.timer += dt;
     while(music.timer>=stepDur){
       music.timer -= stepDur;
-      music.step = (music.step+1)%16;
+      music.step=(music.step+1)%16;
       musicTick();
     }
-  }
-
-  function resetRun(){
-    state=STATE.WEST;
-    player.x=westHome.x; player.y=westHome.y;
-    player.hp=100; player.coins=0; player.banked=0; player.score=0;
-    player.buffer.active=false; player.buffer.t=0; player.bufferCd=0;
-    player.support.active=false; player.support.t=0;
-    player.dmgGrace=0;
-    hazards.smog=[]; hazards.canopy=[];
-    fade.active=false;
-    rhythm.t=0; rhythm.phase="CHASE";
-    for(const g of ghosts){ g.x=17; g.y=12; g.vx=0; g.vy=0; g.acc=0; }
-    player.px=player.x*TILE; player.py=player.y*TILE;
-  }
-
-  // Render
-  function draw(){
-    const side = (state===STATE.WEST) ? "WEST" : "EAST";
-    drawBackdrop(side);
-
-    if(state===STATE.TITLE){
-      overlayBox("SANTIAGO METRO ESCAPE", [
-        "Commute across the city, collect wages, and bring them home.",
-        "Ghosts chase you and increase allostatic load on contact.",
-        "Step onto METRO to switch sides. Safe Places heal quickly.",
-        "Press H anytime for an explanation of power-ups and hazards.",
-        "",
-        "Press Enter to Start"
-      ]);
-      drawScanlines();
-      return;
-    }
-
-    drawMap();
-    drawHazards();
-    drawMetroOverlay();
-
-    for(const g of ghosts) drawGhost(g);
-    drawPlayer();
-    drawHUD();
-
-    if(state===STATE.GAMEOVER){
-      overlayBox("COGNITIVE COLLAPSE", [
-        `Score: ${Math.floor(player.score)}`,
-        `Carried wages: ${player.coins}`,
-        "",
-        "Chronic environmental stress is linked to cognitive decline risk.",
-        "",
-        "Press Enter to Restart"
-      ]);
-    }
-
-    drawHelpOverlay();
-    drawFade();
-    drawScanlines();
   }
 
   // Main loop
   let last=0;
   function loop(ts){
-    now = ts/1000;
-    const dt = clamp((ts-last)/1000, 0, 0.033);
-    last = ts;
+    now=ts/1000;
+    const dt=clamp((ts-last)/1000,0,0.033);
+    last=ts;
 
-    handleAbilities(dt);
+    handleControls(dt);
 
-    if(fade.active) updateTransition(dt);
+    if(state===STATE.TITLE){
+      drawBackdrop("WEST");
+      overlay("SANTIAGO METRO ESCAPE", [
+        "A Pac-style commute game about the exposome and brain health.",
+        "Collect WAGES in the East and BANK them at Home in the West.",
+        "Support power lets you send ghosts back to the depot briefly.",
+        "Press Enter to start. Press H for help."
+      ]);
+      drawScanlines();
+      requestAnimationFrame(loop);
+      return;
+    }
 
     if(state===STATE.WEST || state===STATE.EAST){
       updatePlayer(dt);
       updateGhosts(dt);
-      updateHazards(dt);
-      applyDamageAndRegen(dt);
-      player.score += dt * 7;
+      updateBuses(dt);
+      updateSmog(dt);
+      applyDamage(dt);
+      player.score += dt*7;
+      updateMusic(dt);
     }
 
-    updateMusic(dt);
-    draw();
+    // Draw
+    drawBackdrop(state===STATE.WEST?"WEST":"EAST");
+    drawMap();
+
+    // buses and metro and smog are “city feel”
+    for(const b of buses) drawBus(b);
+    drawMetro();
+    drawSmog();
+
+    // entities
+    for(const g of ghosts) drawGhost(g);
+    drawPlayer();
+    drawHUD();
+    drawHelp();
+
+    if(state===STATE.GAMEOVER){
+      overlay("COGNITIVE COLLAPSE", [
+        `Score: ${Math.floor(player.score)}`,
+        `Wages delivered this cycle: ${banked}`,
+        "",
+        "Press Enter to restart"
+      ]);
+    }
+
+    drawScanlines();
 
     requestAnimationFrame(loop);
   }
 
-  resetRun();
+  // Start
+  resetAll();
   requestAnimationFrame(loop);
 })();
 </script>
