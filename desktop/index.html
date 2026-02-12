@@ -3,68 +3,75 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Santiago Metro Escape - Level 1 (Pac-style)</title>
+  <title>Santiago Metro Escape v4</title>
   <style>
-    html, body { margin:0; height:100%; background:#05080E; color:#E8F1FF; overflow:hidden;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    #wrap { position:fixed; inset:0; display:grid; place-items:center; }
+    html, body {
+      margin: 0; height: 100%;
+      background: #05080E; color: #E8F1FF;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
     canvas {
       width: min(96vw, 1120px);
       aspect-ratio: 14 / 10;
+      background: #000;
       border-radius: 14px;
       border: 1px solid rgba(232,241,255,0.14);
       box-shadow: 0 14px 42px rgba(0,0,0,0.40);
-      background:#000;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
-    .hint{
-      position:fixed; left:50%; transform:translateX(-50%); bottom:14px;
-      font-size:12px; opacity:0.85; text-align:center;
-      padding:8px 12px; border-radius:999px;
+    .hint {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 14px; font-size: 12px; opacity: 0.88;
+      padding: 8px 12px; border-radius: 999px;
       background: rgba(7,12,18,0.55);
       border: 1px solid rgba(232,241,255,0.14);
       backdrop-filter: blur(6px);
-      max-width:min(920px,92vw);
+      max-width: min(980px, 92vw);
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <div id="wrap"><canvas id="c" width="980" height="700"></canvas></div>
-  <div class="hint">Move: WASD / Arrows • Buffer (power-up): Space • Help: H • Mute: M • Start/Restart: Enter</div>
+  <div class="hint">
+    Move: WASD / Arrows • Support Power: Space • Help: H • Mute: M • Start/Restart: Enter
+  </div>
 
 <script>
 (() => {
   const c = document.getElementById("c");
   const ctx = c.getContext("2d");
 
-  const W=c.width, H=c.height;
+  const W = c.width, H = c.height;
 
-  // Pac-scale: readable corridors
-  const TILE=28;
-  const COLS=Math.floor(W/TILE); // 35
-  const ROWS=Math.floor(H/TILE); // 25
+  // Pac-style readable scale
+  const TILE = 28;
+  const COLS = Math.floor(W / TILE); // 35
+  const ROWS = Math.floor(H / TILE); // 25
 
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const rand=(a,b)=>a+Math.random()*(b-a);
-  const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand  = (a,b)=>a+Math.random()*(b-a);
+  const dist  = (ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
 
   // Input
-  const keys=new Set();
-  addEventListener("keydown", e=>{
-    const k=(e.key===" "?"space":e.key.toLowerCase());
+  const keys = new Set();
+  addEventListener("keydown", (e)=>{
+    const k = (e.key===" " ? "space" : e.key.toLowerCase());
     keys.add(k);
-    if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
+    if (["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
   });
-  addEventListener("keyup", e=>{
-    const k=(e.key===" "?"space":e.key.toLowerCase());
+  addEventListener("keyup", (e)=>{
+    const k = (e.key===" " ? "space" : e.key.toLowerCase());
     keys.delete(k);
   });
 
   // Audio
-  let audioCtx=null, muted=false;
-  function ensureAudio(){ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }
-  function sfx(freq=440,dur=0.06,vol=0.05,type="square",slide=0){
+  let audioCtx = null, muted = false;
+  function ensureAudio(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+  function sfx(freq=440, dur=0.06, vol=0.05, type="square", slide=0){
     if(muted) return;
     try{
       ensureAudio();
@@ -72,17 +79,17 @@
       const o=audioCtx.createOscillator();
       const g=audioCtx.createGain();
       o.type=type;
-      o.frequency.setValueAtTime(freq,t0);
-      if(slide) o.frequency.linearRampToValueAtTime(freq+slide,t0+dur);
-      g.gain.setValueAtTime(vol,t0);
-      g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+      o.frequency.setValueAtTime(freq, t0);
+      if(slide) o.frequency.linearRampToValueAtTime(freq+slide, t0+dur);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
       o.connect(g); g.connect(audioCtx.destination);
       o.start(t0); o.stop(t0+dur);
     }catch{}
   }
 
-  // Music loop
-  const music={ bpm:132, timer:0, step:0,
+  // Simple loop
+  const music = { bpm: 132, timer: 0, step: 0,
     lead:[0,2,4,7, 4,2,0,-3, 0,2,4,9, 7,4,2,0],
     bass:[-12,-12,-10,-10, -12,-12,-15,-15, -12,-12,-10,-10, -12,-12,-15,-15]
   };
@@ -90,48 +97,49 @@
   function musicTick(){
     if(muted) return;
     ensureAudio();
-    const base=-9;
-    const st=music.step%16;
-    sfx(noteHz(base+music.lead[st]),0.07,0.020,"square",0);
-    if(st%2===0) sfx(noteHz(base-12+music.bass[st]),0.10,0.026,"triangle",0);
+    const base=-9, st=music.step%16;
+    sfx(noteHz(base+music.lead[st]), 0.07, 0.020, "square", 0);
+    if(st%2===0) sfx(noteHz(base-12+music.bass[st]), 0.10, 0.026, "triangle", 0);
   }
 
   // State
-  const STATE={TITLE:"TITLE", WEST:"WEST", EAST:"EAST", GAMEOVER:"GAMEOVER"};
-  let state=STATE.TITLE;
-  let showHelp=true;
+  const STATE = { TITLE:"TITLE", WEST:"WEST", EAST:"EAST", GAMEOVER:"GAMEOVER" };
+  let state = STATE.TITLE;
+  let showHelp = true;
 
   // Tiles
-  const T={
-    FLOOR:0, WALL:1,
-    DOT:2,
-    METRO:3,
-    SAFE:4,
-    HOME:5,
-    WAGE:6,
-    SUPPORT:7,    // power pellet (friends/family)
-    TREE:8,
-    HOUSE:9
+  // # wall
+  // . dot
+  // O support pellet
+  // M metro
+  // S safe
+  // H bank/home
+  // W wage
+  // R road (bus path)
+  // T tree
+  // A house (decoration tile, still walkable)
+  const T = {
+    FLOOR:0, WALL:1, DOT:2, SUPPORT:3, METRO:4, SAFE:5, HOME:6, WAGE:7,
+    ROAD:8, TREE:9, HOUSE:10
   };
 
-  // Palette
-  const PAL={
+  const PAL = {
     ui:"#E8F1FF",
     uiDim:"rgba(232,241,255,0.75)",
-    westFloor:"#0D1A2B",
+    westFloor:"#0C1626",
     eastFloor:"#081D2D",
     westWall:"#3A2E63",
     eastWall:"#184E77",
-    neon:"rgba(127,177,255,0.30)",
+    neon:"rgba(127,177,255,0.35)",
     dot:"#CFE3FF",
     wage:"#FFD66B",
     support:"#7CFFB5",
     safe:"#7CFFB5",
     metro:"#7FB1FF",
+    road:"#1A263A",
+    roadLine:"rgba(255,214,107,0.55)",
     tree:"#66D6FF",
     house:"#FF8ED6",
-    bus:"#FF6B87",
-    bus2:"#FFD66B",
   };
 
   function rr(x,y,w,h,r){
@@ -144,8 +152,8 @@
     ctx.closePath();
   }
 
-  // Pac-man style looped map with multiple routes + wrap tunnels.
-  // Legend: # wall, . dot, O support, M metro, S safe, H home, W wage, T tree, A house, space floor
+  // A simpler, classic interconnected maze (two wrap tunnels mid-left and mid-right)
+  // Note: border is walls. There are loops everywhere. No linear corridors.
   function parse(lines){
     const m=[];
     for(let y=0;y<ROWS;y++){
@@ -161,6 +169,7 @@
         else if(ch==="S") v=T.SAFE;
         else if(ch==="H") v=T.HOME;
         else if(ch==="W") v=T.WAGE;
+        else if(ch==="R") v=T.ROAD;
         else if(ch==="T") v=T.TREE;
         else if(ch==="A") v=T.HOUSE;
         row.push(v);
@@ -170,81 +179,77 @@
     return m;
   }
 
-  // WEST: more residential, more trees/houses, slightly heavier “traffic lane”
-  const westLines=[
+  // WEST layout (home side). Road loop included for buses.
+  const westLines = [
     "###################################",
-    "#S..A....A....#.......#....A....S.#",
-    "#.###.#####.###.#####.###.#####.###",
-    "#.O..#.....#.....#.....#.....#..O.#",
-    "#.###.###.#####.###.#####.###.###.#",
-    "#.....#...#...#.....#...#...#.....#",
-    "###.###.###.#.#######.#.###.###.###",
-    "#...#.....#.#...#...#.#.....#.....#",
-    "#.###.###.#.###.#.###.#.###.###.###",
-    "#.....#...#.....#.....#...#.....#.#",
-    "###.###.#########.#########.###.###",
-    "#.....#.....A.....#.....A.....#...#",
-    "#.###.###.###.###.#.###.###.###.###",
-    "#...#...#.#.....#.#.....#...#.....#",
-    "###.###.#.#.###.#.#.###.#.###.###.#",
-    "#.....#.#.#.#...#.#...#.#.#.....#.#",
-    "#.###.#.#.#.#.###.###.#.#.#.###.#.#",
-    "#...#.#...#.#.....#...#...#...#...#",
-    "#.###.#####.#######.#####.#####.###",
-    "#.....#.....#.....#.....#.....#...#",
-    "###.###.###.#.###.#.###.#.###.###.#",
-    "#..H..#...#.#...#.#...#.#...#.....#",
-    "#.###.###.#.###.#.#.###.#.###.###.#",
-    "#.....T...#.....#.....#...T.....M.#",
-    "###################################",
-  ];
-
-  // EAST: more “industrial/job” cluster (Wages), still looped, faster routes to Metro
-  const eastLines=[
-    "###################################",
-    "#S..A.....A...#.......#...A.....S.#",
-    "#.###.#####.###.#####.###.#####.###",
-    "#.O..#.....#.....#.....#.....#..O.#",
-    "#.###.###.#####.###.#####.###.###.#",
-    "#.....#...#...#.....#...#...#.....#",
-    "###.###.###.#.#######.#.###.###.###",
-    "#...#.....#.#...#...#.#.....#.....#",
-    "#.###.###.#.###.#.###.#.###.###.###",
-    "#.....#...#.....#.....#...#.....#.#",
-    "###.###.#########.#########.###.###",
-    "#...W.#.....W.....#.....W.....#.W.#",
-    "#.###.###.###.###.#.###.###.###.###",
-    "#...#...#.#.....#.#.....#...#.....#",
-    "###.###.#.#.###.#.#.###.#.###.###.#",
-    "#.....#.#.#.#...#.#...#.#.#.....#.#",
-    "#.###.#.#.#.#.###.###.#.#.#.###.#.#",
-    "#...#.#...#.#.....#...#...#...#...#",
-    "#.###.#####.#######.#####.#####.###",
-    "#.....#.....#.....#.....#.....#...#",
-    "###.###.###.#.###.#.###.#.###.###.#",
-    "#.....#...#.#...#.#...#.#...#.....#",
-    "#.###.###.#.###.#.#.###.#.###.###.#",
-    "#..T......#.....#.....#......T..M.#",
+    "#S....A....#########....A....S....#",
+    "#.###.###..#.......#..###.###.###.#",
+    "#.O.#.....#..###.#..#.....#..O.#..#",
+    "#.###.###.#..#.#.#..#.###.###.###.#",
+    "#.....#...#..#.#.#..#...#.....#...#",
+    "###.###.###..#.#.###.###.###.###.##",
+    "#...#.....#.......#.....#.....#...#",
+    "#.###.###.#####.#####.###.###.###.#",
+    "#.....#.....#...#...#.....#.....#.#",
+    "#.###.#####.#.###.###.#####.###.#.#",
+    "#...#.......#...#.#...#.......#...#",
+    "##R#R###.#######.#.#######.###R#R##",
+    "#...#...#.....#.....#.....#...#...#",
+    "#.###.###.###.#####.###.###.###.###",
+    "#.#..O....#...#...#...#....O..#...#",
+    "#.###.###.###.#.#.###.###.###.###.#",
+    "#...#.....#...#.#...#.....#.....#.#",
+    "###.#.#####.###.###.#####.#.###.#.#",
+    "#...#.....#...#...#.....#.#...#...#",
+    "#.###.###.###.###.###.###.###.###.#",
+    "#..H..#.......#.....#.......#..T..#",
+    "#.###.#####.###.###.#####.###.###.#",
+    "#.....T.....#....M....#.....A.....#",
     "###################################",
   ];
 
-  const west=parse(westLines);
-  const east=parse(eastLines);
+  // EAST layout (work side). Similar connectivity, more W wages.
+  const eastLines = [
+    "###################################",
+    "#S....A....#########....A....S....#",
+    "#.###.###..#.......#..###.###.###.#",
+    "#.O.#.....#..###.#..#.....#..O.#..#",
+    "#.###.###.#..#.#.#..#.###.###.###.#",
+    "#.....#...#..#.#.#..#...#.....#...#",
+    "###.###.###..#.#.###.###.###.###.##",
+    "#...#.....#.......#.....#.....#...#",
+    "#.###.###.#####.#####.###.###.###.#",
+    "#.....#.....#...#...#.....#.....#.#",
+    "#.###.#####.#.###.###.#####.###.#.#",
+    "#..W#..W....#...#.#...#....W..#..W#",
+    "##R#R###.#######.#.#######.###R#R##",
+    "#...#...#.....#.....#.....#...#...#",
+    "#.###.###.###.#####.###.###.###.###",
+    "#.#..O....#...#...#...#....O..#...#",
+    "#.###.###.###.#.#.###.###.###.###.#",
+    "#...#.....#...#.#...#.....#.....#.#",
+    "###.#.#####.###.###.#####.#.###.#.#",
+    "#...#.....#...#...#.....#.#...#...#",
+    "#.###.###.###.###.###.###.###.###.#",
+    "#.....#.......#.....#.......#.....#",
+    "#.###.#####.###.###.#####.###.###.#",
+    "#.....T.....#....M....#.....T.....#",
+    "###################################",
+  ];
 
-  function curMap(){ return (state===STATE.WEST)?west:east; }
+  const west = parse(westLines);
+  const east = parse(eastLines);
+
+  function curMap(){ return (state===STATE.WEST) ? west : east; }
   function tileAt(m,x,y){ return (m[y] && m[y][x]!==undefined) ? m[y][x] : T.WALL; }
   function isWall(m,x,y){ return tileAt(m,x,y)===T.WALL; }
 
-  // Wrap tunnels: allow x=-1 -> x=COLS-2 (inside wall border), and x=COLS -> x=1
-  function wrapX(x){
-    if(x<=0) return COLS-2;
-    if(x>=COLS-1) return 1;
-    return x;
-  }
+  // Wrap tunnels at row 12 (0-indexed), by making x=0 and x=COLS-1 walls but we teleport across when moving through the openings.
+  const WRAP_ROW = 12;
 
   function canMove(m,x,y){
     if(y<=0 || y>=ROWS-1) return false;
-    x = wrapX(x);
+    if(x<=0 || x>=COLS-1) return false; // borders are walls
     return !isWall(m,x,y);
   }
 
@@ -252,94 +257,69 @@
     for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(m[y][x]===tval) return {x,y};
     return {x:1,y:1};
   }
-  const westHome=findTile(west,T.HOME);
-  const westMetro=findTile(west,T.METRO);
-  const eastMetro=findTile(east,T.METRO);
+
+  const depot = { x: 17, y: 12 };
+  const westHome = findTile(west, T.HOME);
+  const westMetro = findTile(west, T.METRO);
+  const eastMetro = findTile(east, T.METRO);
 
   // Player
-  const player={
+  const player = {
     x: westHome.x, y: westHome.y,
     px:0, py:0,
     hp:100, maxHp:100,
-    speed:7.2,
-    sprintMul:1.35,
-    carried:0,
-    score:0,
-    invuln:0,
-    // power-up
-    power:{ active:false, t:0, dur:7.0 },
-    buffer:{ active:false, t:0, dur:2.0, radius:2.2 },
-    bufferCd:0,
+    speed: 7.2,
+    carried: 0,
+    score: 0,
+    invuln: 0,
+    power: { active:false, t:0, dur:7.0 },
   };
+  let banked = 0;
 
-  // Ghost system: roam + chase, frightened + return-to-depot on tag
-  const depot={x:17,y:12};
-  const rhythm={ t:0, phase:"CHASE", chase:7.0, scatter:3.5 };
-
-  function mkGhost(name,color,speed,homeOffset){
+  // Ghosts
+  function mkGhost(name, color, speed, start){
     return {
-      name,color,speed,
-      x:depot.x+homeOffset.x, y:depot.y+homeOffset.y,
-      px:0,py:0,vx:0,vy:0,acc:0,
-      mode:"CHASE",          // CHASE | SCATTER | FRIGHT | EATEN
-      eatenTimer:0
+      name, color, speed,
+      x: start.x, y: start.y, px:0, py:0,
+      vx:0, vy:0, acc:0,
+      mode:"CHASE",   // CHASE, FRIGHT, EATEN
+      eatenTimer: 0,
+      lastDir: {dx:0,dy:0},
     };
   }
 
-  const ghosts=[
-    mkGhost("SMOG"  ,"#7CFFB5",3.10,{x:-1,y:0}),
-    mkGhost("SIREN" ,"#FFD66B",3.25,{x: 1,y:0}),
-    mkGhost("HEAT"  ,"#FF6B87",3.05,{x: 0,y:-1}),
-    mkGhost("STRESS","#7FB1FF",3.35,{x: 0,y: 1}),
+  const ghosts = [
+    mkGhost("SMOG",   "#7CFFB5", 4.15, {x:depot.x-1,y:depot.y}),
+    mkGhost("SIREN",  "#FFD66B", 4.35, {x:depot.x+1,y:depot.y}),
+    mkGhost("HEAT",   "#FF6B87", 4.05, {x:depot.x,y:depot.y-1}),
+    mkGhost("STRESS", "#7FB1FF", 4.45, {x:depot.x,y:depot.y+1}),
   ];
 
-  // Hazards for city feel: moving buses and ambient smog puffs
-  const buses=[
-    { laneY: 6, x: 2, dir: 1, speed: 3.2, color: PAL.bus },
-    { laneY: 18, x: COLS-3, dir: -1, speed: 3.0, color: PAL.bus2 },
+  // Buses follow ROAD tiles only, obeying collision rules
+  function mkBus(color, start){
+    return { color, x:start.x, y:start.y, px:0, py:0, acc:0, lastDir:{dx:1,dy:0} };
+  }
+  const buses = [
+    mkBus("rgba(255,107,135,0.95)", {x:2, y:12}),
+    mkBus("rgba(255,214,107,0.95)", {x:COLS-3, y:12}),
   ];
-  const smogPuffs=[]; // {x,y,r,t}
 
-  // Difficulty
-  const level={
-    dps:16,
-    regen:7.0,
-    safeRegen:2.2,
-    safeDmg:0.55,
-    powerGhostSpeedMul:0.72,
-    goalWages:3,
-  };
-  let banked=0;
+  // Difficulty tuning
+  const level = { dps: 18, regen: 7.0, safeRegenMul: 2.2, safeDmgMul: 0.55, goalWages: 4 };
 
-  function resetAll(){
-    state=STATE.WEST;
-    player.x=westHome.x; player.y=westHome.y;
-    player.hp=100; player.carried=0; player.score=0;
-    player.invuln=0;
-    player.power.active=false; player.power.t=0;
-    player.buffer.active=false; player.buffer.t=0; player.bufferCd=0;
-
-    banked=0;
-    rhythm.t=0; rhythm.phase="CHASE";
-
-    for(const g of ghosts){
-      g.x=depot.x + (Math.random()<0.5?-1:1);
-      g.y=depot.y + (Math.random()<0.5?-1:1);
-      g.vx=0; g.vy=0; g.acc=0;
-      g.mode="CHASE";
-      g.eatenTimer=0;
-    }
-    smogPuffs.length=0;
+  // Helpers
+  function isSafe(m,x,y){
+    const t = tileAt(m,x,y);
+    return t===T.SAFE || t===T.HOME;
   }
 
-  // City backdrop
-  let now=0;
   function drawBackdrop(side){
-    const sky=ctx.createLinearGradient(0,0,0,H);
-    sky.addColorStop(0, side==="WEST" ? "#2B3E74" : "#234F86");
-    sky.addColorStop(0.55, side==="WEST" ? "#0B1A2E" : "#0A203A");
+    const sky = ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0, side===STATE.WEST ? "#2B3E74" : "#234F86");
+    sky.addColorStop(0.58, side===STATE.WEST ? "#0B1A2E" : "#0A203A");
     sky.addColorStop(1, "#05080E");
-    ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=sky;
+    ctx.fillRect(0,0,W,H);
 
     // Andes
     ctx.fillStyle="rgba(0,0,0,0.33)";
@@ -350,51 +330,46 @@
     ctx.lineTo(W,210); ctx.lineTo(0,210); ctx.closePath();
     ctx.fill();
 
-    // Skyline
-    const baseY=220;
-    const n=54;
+    // skyline
+    const baseY=220, n=58;
     for(let i=0;i<n;i++){
       const bw=Math.floor(rand(10,28));
-      const bh=Math.floor(rand(18, side==="WEST"?85:150));
-      const bx=Math.floor(rand(-20,W+20));
-      ctx.fillStyle=side==="WEST" ? "rgba(0,0,0,0.23)" : "rgba(0,0,0,0.19)";
+      const bh=Math.floor(rand(18, side===STATE.WEST ? 90 : 150));
+      const bx=Math.floor(rand(-20, W+20));
+      ctx.fillStyle= side===STATE.WEST ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.20)";
       ctx.fillRect(bx, baseY-bh, bw, bh);
-      if(side==="EAST" && Math.random()<0.18){
-        ctx.fillStyle="rgba(232,241,255,0.06)";
-        ctx.fillRect(bx+2, baseY-bh+8, 2, bh-14);
-      }
     }
 
-    // Smog band (west heavier)
-    const a = side==="WEST" ? 0.20 : 0.10;
+    // metro line ribbon
     ctx.save();
-    ctx.globalAlpha=a;
-    ctx.fillStyle="#D7FFD9";
-    ctx.fillRect(0,185,W,70);
-    ctx.globalAlpha=a*0.75;
-    for(let i=0;i<40;i++){
-      const x=(i*40 + (now*18))%W;
-      const y=195 + (i%6)*7;
-      ctx.beginPath();
-      ctx.arc(x,y, 18+(i%4)*8, 0, Math.PI*2);
-      ctx.fill();
-    }
+    ctx.globalAlpha=0.14;
+    ctx.fillStyle="rgba(127,177,255,0.7)";
+    ctx.fillRect(0, 240, W, 8);
     ctx.restore();
   }
 
-  // Tile art: colorful “city feel”
   function drawTile(m,x,y){
     const t=tileAt(m,x,y);
     const gx=x*TILE, gy=y*TILE;
 
-    // floor as pavement
+    // floor base
     ctx.fillStyle = (state===STATE.WEST) ? PAL.westFloor : PAL.eastFloor;
     ctx.fillRect(gx,gy,TILE,TILE);
 
-    // subtle crosshatch
-    ctx.fillStyle="rgba(232,241,255,0.04)";
-    if((x+y)%3===0) ctx.fillRect(gx+((x*7+y*3)%TILE|0), gy+((x*5+y*11)%TILE|0), 1, 1);
+    // ROAD
+    if(t===T.ROAD){
+      ctx.fillStyle = PAL.road;
+      ctx.fillRect(gx,gy,TILE,TILE);
+      ctx.strokeStyle = PAL.roadLine;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(gx+4, gy+TILE/2);
+      ctx.lineTo(gx+TILE-4, gy+TILE/2);
+      ctx.stroke();
+      return;
+    }
 
+    // WALL
     if(t===T.WALL){
       const wall = (state===STATE.WEST) ? PAL.westWall : PAL.eastWall;
       ctx.fillStyle=wall;
@@ -404,25 +379,26 @@
       ctx.fillStyle="rgba(255,255,255,0.10)";
       ctx.fillRect(gx+2,gy+2,TILE-4,2);
       ctx.fillRect(gx+2,gy+2,2,TILE-4);
-      ctx.fillStyle="rgba(0,0,0,0.26)";
+      ctx.fillStyle="rgba(0,0,0,0.30)";
       ctx.fillRect(gx+2,gy+TILE-4,TILE-4,2);
       ctx.fillRect(gx+TILE-4,gy+2,2,TILE-4);
 
-      // neon edge if adjacent is floor
+      // neon edge glow
       ctx.save();
-      ctx.globalAlpha=0.20;
-      ctx.strokeStyle="rgba(127,177,255,0.35)";
+      ctx.globalAlpha=0.22;
+      ctx.strokeStyle=PAL.neon;
       ctx.lineWidth=2;
       ctx.beginPath();
-      if(!isWall(m,wrapX(x),y-1)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+TILE-3,gy+3); }
-      if(!isWall(m,wrapX(x),y+1)) { ctx.moveTo(gx+3,gy+TILE-3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
-      if(!isWall(m,wrapX(x-1),y)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+3,gy+TILE-3); }
-      if(!isWall(m,wrapX(x+1),y)) { ctx.moveTo(gx+TILE-3,gy+3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
+      if(!isWall(m,x,y-1)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+TILE-3,gy+3); }
+      if(!isWall(m,x,y+1)) { ctx.moveTo(gx+3,gy+TILE-3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
+      if(!isWall(m,x-1,y)) { ctx.moveTo(gx+3,gy+3); ctx.lineTo(gx+3,gy+TILE-3); }
+      if(!isWall(m,x+1,y)) { ctx.moveTo(gx+TILE-3,gy+3); ctx.lineTo(gx+TILE-3,gy+TILE-3); }
       ctx.stroke();
       ctx.restore();
       return;
     }
 
+    // DOT
     if(t===T.DOT){
       ctx.save();
       ctx.globalAlpha=0.88;
@@ -434,27 +410,10 @@
       return;
     }
 
-    if(t===T.WAGE){
-      ctx.save();
-      ctx.globalAlpha=0.20;
-      ctx.fillStyle=PAL.wage;
-      ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
-      ctx.globalAlpha=0.95;
-      ctx.fillStyle=PAL.wage;
-      ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+TILE/2, 6.2, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalAlpha=0.22;
-      ctx.fillStyle="#000";
-      ctx.fillRect(gx+TILE/2-1, gy+TILE/2-4, 2, 8);
-      ctx.restore();
-      return;
-    }
-
+    // SUPPORT (power pellet)
     if(t===T.SUPPORT){
-      // Big “power pellet” (friends/family)
-      ctx.save();
       const pulse=0.55+0.45*Math.sin(now*5.0);
+      ctx.save();
       ctx.globalAlpha=0.18;
       ctx.fillStyle=PAL.support;
       ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
@@ -463,16 +422,11 @@
       ctx.beginPath();
       ctx.arc(gx+TILE/2, gy+TILE/2, 7.8 + 1.2*pulse, 0, Math.PI*2);
       ctx.fill();
-      ctx.globalAlpha=0.28;
-      ctx.strokeStyle="rgba(232,241,255,0.35)";
-      ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.arc(gx+TILE/2, gy+TILE/2, 10.5 + 1.2*pulse, 0, Math.PI*2);
-      ctx.stroke();
       ctx.restore();
       return;
     }
 
+    // SAFE
     if(t===T.SAFE){
       ctx.save();
       ctx.globalAlpha=0.18;
@@ -488,9 +442,25 @@
       return;
     }
 
+    // WAGE
+    if(t===T.WAGE){
+      ctx.save();
+      ctx.globalAlpha=0.20;
+      ctx.fillStyle=PAL.wage;
+      ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
+      ctx.globalAlpha=0.95;
+      ctx.fillStyle=PAL.wage;
+      ctx.beginPath();
+      ctx.arc(gx+TILE/2, gy+TILE/2, 6.2, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // TREE
     if(t===T.TREE){
       ctx.save();
-      ctx.globalAlpha=0.16;
+      ctx.globalAlpha=0.18;
       ctx.fillStyle=PAL.tree;
       ctx.fillRect(gx+3,gy+3,TILE-6,TILE-6);
       ctx.globalAlpha=0.90;
@@ -501,14 +471,33 @@
       return;
     }
 
-    if(t===T.HOUSE || t===T.HOME){
+    // HOUSE (walkable decoration)
+    if(t===T.HOUSE){
       ctx.save();
-      ctx.globalAlpha=0.14;
-      ctx.fillStyle=(t===T.HOME) ? "#E8F1FF" : PAL.house;
+      ctx.globalAlpha=0.16;
+      ctx.fillStyle=PAL.house;
       ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
       ctx.globalAlpha=0.92;
-      ctx.fillStyle=(t===T.HOME) ? "#E8F1FF" : PAL.house;
-      // house icon
+      ctx.fillStyle=PAL.house;
+      ctx.fillRect(gx+9, gy+15, 10, 9);
+      ctx.beginPath();
+      ctx.moveTo(gx+8, gy+15);
+      ctx.lineTo(gx+14, gy+10);
+      ctx.lineTo(gx+20, gy+15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // HOME
+    if(t===T.HOME){
+      ctx.save();
+      ctx.globalAlpha=0.14;
+      ctx.fillStyle="#E8F1FF";
+      ctx.fillRect(gx+2,gy+2,TILE-4,TILE-4);
+      ctx.globalAlpha=0.92;
+      ctx.fillStyle="#E8F1FF";
       ctx.fillRect(gx+9, gy+15, 10, 9);
       ctx.beginPath();
       ctx.moveTo(gx+8, gy+15);
@@ -517,46 +506,30 @@
       ctx.closePath();
       ctx.fill();
 
-      if(t===T.HOME){
-        ctx.globalAlpha=0.9;
-        ctx.fillStyle="rgba(7,12,18,0.65)";
-        rr(gx-6, gy-12, TILE+12, 16, 8); ctx.fill();
-        ctx.globalAlpha=0.9;
-        ctx.fillStyle="#E8F1FF";
-        ctx.font="bold 11px ui-monospace, monospace";
-        ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillText("BANK", gx+TILE/2, gy-4);
-      }
-
+      ctx.globalAlpha=0.90;
+      ctx.fillStyle="rgba(7,12,18,0.65)";
+      rr(gx-6, gy-12, TILE+12, 16, 8); ctx.fill();
+      ctx.fillStyle="#E8F1FF";
+      ctx.font="bold 11px ui-monospace, monospace";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("BANK", gx+TILE/2, gy-4);
       ctx.restore();
       return;
     }
-  }
 
-  function drawMap(){
-    const m=curMap();
-    for(let y=0;y<ROWS;y++){
-      for(let x=0;x<COLS;x++) drawTile(m,x,y);
-    }
-  }
-
-  function drawMetroOverlay(){
-    const m=curMap();
-    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-      if(tileAt(m,x,y)!==T.METRO) continue;
-      const gx=x*TILE, gy=y*TILE;
+    // METRO
+    if(t===T.METRO){
       const cx=gx+TILE/2, cy=gy+TILE/2;
-
-      const pulse=0.55+0.45*Math.sin(now*5.2);
+      const pulse=0.55+0.45*Math.sin(now*5.1);
       ctx.save();
-      ctx.globalAlpha=0.20+0.10*pulse;
+      ctx.globalAlpha=0.22+0.10*pulse;
       ctx.fillStyle="rgba(127,177,255,0.65)";
       ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.fill();
 
       ctx.globalAlpha=1;
       ctx.fillStyle="rgba(7,12,18,0.82)";
-      rr(gx-16, gy-10, TILE+32, TILE+22, 12); ctx.fill();
-      ctx.strokeStyle="rgba(127,177,255,0.65)";
+      rr(gx-18, gy-10, TILE+36, TILE+22, 12); ctx.fill();
+      ctx.strokeStyle="rgba(127,177,255,0.75)";
       ctx.lineWidth=2; ctx.stroke();
 
       ctx.fillStyle="rgba(127,177,255,0.22)";
@@ -565,55 +538,25 @@
       ctx.font="bold 12px ui-monospace, monospace";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText("METRO", cx, gy+2);
-
-      ctx.globalAlpha=0.90;
-      ctx.fillStyle="rgba(255,214,107,0.95)";
-      ctx.beginPath();
-      if(state===STATE.WEST){
-        ctx.moveTo(gx+TILE+10, cy);
-        ctx.lineTo(gx+TILE+2, cy-6);
-        ctx.lineTo(gx+TILE+2, cy+6);
-      } else {
-        ctx.moveTo(gx-10, cy);
-        ctx.lineTo(gx-2, cy-6);
-        ctx.lineTo(gx-2, cy+6);
-      }
-      ctx.closePath(); ctx.fill();
-
-      // prompt
-      if(player.x===x && player.y===y){
-        ctx.globalAlpha=0.95;
-        ctx.fillStyle="rgba(7,12,18,0.80)";
-        rr(cx-110, cy+26, 220, 22, 10); ctx.fill();
-        ctx.strokeStyle="rgba(232,241,255,0.18)"; ctx.stroke();
-        ctx.fillStyle="#E8F1FF";
-        ctx.font="12px ui-monospace, monospace";
-        ctx.fillText("RIDE METRO (auto)", cx, cy+37);
-      }
-
       ctx.restore();
+      return;
     }
   }
 
-  function drawBus(bus){
-    // bus is a moving obstacle/life texture; does NOT block player yet (visual + exposure)
-    const x=bus.x*TILE, y=bus.laneY*TILE;
-    ctx.save();
-    ctx.globalAlpha=0.90;
-    ctx.fillStyle="rgba(0,0,0,0.30)";
-    ctx.beginPath();
-    ctx.ellipse(x+TILE/2, y+TILE/2+10, 16, 5, 0, 0, Math.PI*2);
-    ctx.fill();
+  function drawMap(){
+    const m=curMap();
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        drawTile(m,x,y);
+      }
+    }
 
-    ctx.fillStyle=bus.color;
-    rr(x-10, y+6, TILE+20, TILE-12, 10); ctx.fill();
+    // draw wrap tunnel indicators
+    ctx.save();
     ctx.globalAlpha=0.20;
-    ctx.fillStyle="#FFF";
-    rr(x-6, y+10, TILE+12, 10, 6); ctx.fill();
-    ctx.globalAlpha=0.90;
-    ctx.fillStyle="#111";
-    ctx.fillRect(x-2, y+TILE-10, 6, 4);
-    ctx.fillRect(x+TILE-4, y+TILE-10, 6, 4);
+    ctx.fillStyle="rgba(232,241,255,0.7)";
+    ctx.fillRect(0, WRAP_ROW*TILE+TILE/2-2, 18, 4);
+    ctx.fillRect(W-18, WRAP_ROW*TILE+TILE/2-2, 18, 4);
     ctx.restore();
   }
 
@@ -622,12 +565,14 @@
     const pulse=0.70+0.30*Math.sin(now*9);
 
     ctx.save();
+    // shadow
     ctx.globalAlpha=0.22;
     ctx.fillStyle="#000";
     ctx.beginPath();
     ctx.ellipse(x+TILE/2, y+TILE/2+10, 12, 4.6, 0, 0, Math.PI*2);
     ctx.fill();
 
+    // body
     ctx.globalAlpha=0.95;
     ctx.fillStyle="rgba(59,228,197,0.95)";
     rr(x+5, y+5, TILE-10, TILE-10, 10); ctx.fill();
@@ -648,18 +593,6 @@
       ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.stroke();
     }
 
-    // buffer ring
-    if(player.buffer.active){
-      const r=player.buffer.radius*TILE;
-      ctx.globalAlpha=0.10;
-      ctx.fillStyle="#66D6FF";
-      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.fill();
-      ctx.globalAlpha=0.22;
-      ctx.strokeStyle="rgba(232,241,255,0.35)";
-      ctx.lineWidth=2;
-      ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,r,0,Math.PI*2); ctx.stroke();
-    }
-
     // invuln blink
     if(player.invuln>0){
       ctx.globalAlpha=0.35+0.35*Math.sin(now*24);
@@ -672,10 +605,10 @@
 
   function drawGhost(g){
     const x=g.px, y=g.py;
-    ctx.save();
-
     const frightened = (g.mode==="FRIGHT");
     const eaten = (g.mode==="EATEN");
+
+    ctx.save();
 
     // shadow
     ctx.globalAlpha=0.20;
@@ -686,15 +619,9 @@
 
     // body
     ctx.globalAlpha=0.98;
-    ctx.fillStyle = eaten ? "rgba(232,241,255,0.35)" : frightened ? "rgba(232,241,255,0.75)" : g.color;
-
+    ctx.fillStyle = eaten ? "rgba(232,241,255,0.35)" : frightened ? "rgba(232,241,255,0.80)" : g.color;
     rr(x+5, y+6, TILE-10, TILE-10, 12); ctx.fill();
     ctx.fillRect(x+5, y+TILE-9, TILE-10, 6);
-    ctx.globalCompositeOperation="destination-out";
-    ctx.fillRect(x+8, y+TILE-5, 4, 2);
-    ctx.fillRect(x+14, y+TILE-5, 4, 2);
-    ctx.fillRect(x+20, y+TILE-5, 4, 2);
-    ctx.globalCompositeOperation="source-over";
 
     // eyes
     ctx.globalAlpha=0.90;
@@ -702,13 +629,46 @@
     ctx.beginPath(); ctx.arc(x+TILE/2-6, y+TILE/2-1, 3.4, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(x+TILE/2+6, y+TILE/2-1, 3.4, 0, Math.PI*2); ctx.fill();
 
-    const pxo=clamp(g.vx*1.2,-1.2,1.2);
-    const pyo=clamp(g.vy*1.2,-1.2,1.2);
+    const pxo=clamp(g.lastDir.dx*1.2,-1.2,1.2);
+    const pyo=clamp(g.lastDir.dy*1.2,-1.2,1.2);
     ctx.globalAlpha=0.85;
     ctx.fillStyle= frightened ? "#0B1A2E" : "#E8F1FF";
     ctx.beginPath(); ctx.arc(x+TILE/2-6+pxo, y+TILE/2-1+pyo, 1.5, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(x+TILE/2+6+pxo, y+TILE/2-1+pyo, 1.5, 0, Math.PI*2); ctx.fill();
 
+    // label (tiny) for readability
+    ctx.globalAlpha=0.55;
+    ctx.fillStyle="rgba(7,12,18,0.55)";
+    rr(x+1, y-10, TILE-2, 12, 6); ctx.fill();
+    ctx.globalAlpha=0.85;
+    ctx.fillStyle="#E8F1FF";
+    ctx.font="10px ui-monospace, monospace";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(g.name[0], x+TILE/2, y-4);
+
+    ctx.restore();
+  }
+
+  function drawBus(b){
+    const x=b.px, y=b.py;
+    ctx.save();
+    ctx.globalAlpha=0.90;
+    ctx.fillStyle="rgba(0,0,0,0.30)";
+    ctx.beginPath();
+    ctx.ellipse(x+TILE/2, y+TILE/2+10, 16, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle=b.color;
+    rr(x-8, y+6, TILE+16, TILE-12, 10); ctx.fill();
+
+    ctx.globalAlpha=0.20;
+    ctx.fillStyle="#FFF";
+    rr(x-4, y+10, TILE+8, 10, 6); ctx.fill();
+
+    ctx.globalAlpha=0.92;
+    ctx.fillStyle="#111";
+    ctx.fillRect(x-2, y+TILE-10, 6, 4);
+    ctx.fillRect(x+TILE-4, y+TILE-10, 6, 4);
     ctx.restore();
   }
 
@@ -717,7 +677,7 @@
     ctx.fillStyle="rgba(5,8,14,0.66)";
     ctx.fillRect(0,0,W,70);
 
-    const side=(state===STATE.WEST)?"WEST (Home)":"EAST (Work)";
+    const side = (state===STATE.WEST) ? "WEST (Home)" : "EAST (Work)";
     ctx.fillStyle=PAL.ui;
     ctx.font="16px ui-monospace, monospace";
     ctx.textBaseline="middle";
@@ -725,7 +685,7 @@
 
     ctx.fillStyle=PAL.uiDim;
     ctx.font="13px ui-monospace, monospace";
-    ctx.fillText(`Goal: Deliver ${level.goalWages} wages. Carried: ${player.carried}  |  Banked this cycle: ${banked}`, 14, 44);
+    ctx.fillText(`Goal: Deliver ${level.goalWages} wages. Carried: ${player.carried}  |  Banked: ${banked}`, 14, 44);
 
     // health bar
     const hbX=520, hbY=16, hbW=240, hbH=18;
@@ -744,16 +704,12 @@
     const powLeft = player.power.active ? `${Math.ceil(player.power.dur-player.power.t)}s` : "none";
     ctx.fillText(`Support power: ${powLeft}`, 790, 18);
 
-    const bufLeft = Math.max(0, player.bufferCd).toFixed(1);
-    ctx.fillStyle=PAL.uiDim;
-    ctx.fillText(`Buffer CD: ${bufLeft}s`, 790, 44);
-
     ctx.restore();
   }
 
   function drawHelp(){
     if(!showHelp) return;
-    const bw=850, bh=340;
+    const bw=860, bh=330;
     const x=(W-bw)/2, y=(H-bh)/2;
     ctx.save();
     ctx.fillStyle="rgba(7,12,18,0.78)";
@@ -771,14 +727,14 @@
     ctx.textAlign="left"; ctx.textBaseline="top";
     const lines=[
       "You commute between WEST (home) and EAST (work) through the METRO.",
-      "Pick up WAGES (gold) in the EAST and bring them to the BANK at HOME.",
+      "Pick up WAGES (gold) in the EAST and BANK them at HOME in the WEST.",
       "",
-      "Ghosts = stressors. Touching them drains health (allostatic load).",
-      "Support power (big green pellet) frightens ghosts for a few seconds.",
+      "Ghosts actively hunt you using shortest-path logic.",
+      "Support Power (Space) frightens ghosts for a few seconds.",
       "While frightened, touching a ghost sends it back to the depot to respawn.",
       "",
-      "Dots are route points. Safe circles heal fast. Trees/houses add city texture.",
-      "Buses move through the city and increase exposure when you stand near them.",
+      "Buses only travel on ROAD tiles (they obey walls).",
+      "Safe zones heal faster. Health represents allostatic load on the brain.",
       "",
       "Press H to toggle this overlay."
     ];
@@ -821,78 +777,384 @@
     ctx.restore();
   }
 
-  // Pickups & metro
+  // Wrap tunnel: moving off left/right at WRAP_ROW teleports
+  function tryWrap(nx, ny, dx){
+    if(ny !== WRAP_ROW) return {nx, ny, wrapped:false};
+    // openings are inside border at x=1 and x=COLS-2, but if player tries to step beyond, wrap
+    if(dx < 0 && nx === 0)  return {nx: COLS-2, ny, wrapped:true};
+    if(dx > 0 && nx === COLS-1) return {nx: 1, ny, wrapped:true};
+    return {nx, ny, wrapped:false};
+  }
+
+  // Pickups and metro
   function handlePickups(){
     const m=curMap();
-    const tx=wrapX(player.x);
-    const t=tileAt(m,tx,player.y);
+    const t = tileAt(m, player.x, player.y);
 
     if(t===T.DOT){
-      m[player.y][tx]=T.FLOOR;
+      m[player.y][player.x]=T.FLOOR;
       player.score += 2;
-      sfx(720, 0.03, 0.020, "square", 60);
+      sfx(720,0.03,0.020,"square",60);
     }
 
     if(t===T.WAGE){
-      m[player.y][tx]=T.FLOOR;
+      m[player.y][player.x]=T.FLOOR;
       player.carried += 1;
       player.score += 40;
-      sfx(920, 0.05, 0.04, "square", 80);
+      sfx(920,0.05,0.04,"square",80);
     }
 
     if(t===T.SUPPORT){
-      m[player.y][tx]=T.FLOOR;
+      m[player.y][player.x]=T.FLOOR;
       player.power.active=true;
       player.power.t=0;
-      // frighten all ghosts
       for(const g of ghosts){
         if(g.mode!=="EATEN") g.mode="FRIGHT";
       }
-      sfx(660, 0.10, 0.05, "triangle", 0);
-      sfx(980, 0.06, 0.04, "square", 0);
+      sfx(660,0.10,0.05,"triangle",0);
+      sfx(980,0.06,0.04,"square",0);
     }
 
     if(t===T.METRO){
-      // immediate travel
+      // travel
       if(state===STATE.WEST){
         state=STATE.EAST;
-        player.x = eastMetro.x-1;
-        player.y = eastMetro.y;
+        player.x = eastMetro.x;
+        player.y = eastMetro.y+1;
       } else {
         state=STATE.WEST;
-        player.x = westMetro.x+1;
-        player.y = westMetro.y;
+        player.x = westMetro.x;
+        player.y = westMetro.y-1;
       }
-      // ghosts keep chasing but reposition slightly so transition is readable
+      // reposition ghosts near depot but not stuck
       for(const g of ghosts){
-        g.x = depot.x + (Math.random()<0.5?-2:2);
-        g.y = depot.y + (Math.random()<0.5?-1:1);
-        g.vx=0; g.vy=0; g.acc=0;
+        g.x = depot.x + (Math.random()<0.5?-3:3);
+        g.y = depot.y + (Math.random()<0.5?-2:2);
+        g.acc=0; g.lastDir={dx:0,dy:0};
         if(g.mode==="EATEN") g.mode="CHASE";
       }
-      sfx(320, 0.08, 0.04, "triangle", -60);
-      sfx(520, 0.06, 0.04, "square", 60);
+      sfx(320,0.08,0.04,"triangle",-60);
+      sfx(520,0.06,0.04,"square",60);
     }
 
-    // Bank at home
     if(state===STATE.WEST && t===T.HOME && player.carried>0){
       banked += player.carried;
       player.score += player.carried*80;
-      player.carried=0;
+      player.carried = 0;
 
-      if(banked>=level.goalWages){
+      if(banked >= level.goalWages){
         player.score += 350;
-        banked=0;
-        sfx(740, 0.09, 0.05, "square", 90);
-        sfx(520, 0.12, 0.05, "triangle", 0);
+        banked = 0;
+        sfx(740,0.09,0.05,"square",90);
+        sfx(520,0.12,0.05,"triangle",0);
       } else {
-        sfx(520, 0.08, 0.04, "triangle", 0);
+        sfx(520,0.08,0.04,"triangle",0);
       }
     }
   }
 
-  // Abilities and toggles
-  function handleControls(dt){
+  // BFS pathfinding to next step on shortest path
+  // Returns first step direction from (sx,sy) to (tx,ty)
+  function bfsNextStep(m, sx, sy, tx, ty){
+    if(sx===tx && sy===ty) return {dx:0,dy:0};
+
+    const qx = new Int16Array(COLS*ROWS);
+    const qy = new Int16Array(COLS*ROWS);
+    const prev = new Int32Array(COLS*ROWS);
+    prev.fill(-1);
+
+    const idx = (x,y)=>y*COLS+x;
+
+    let head=0, tail=0;
+    qx[tail]=sx; qy[tail]=sy; tail++;
+    prev[idx(sx,sy)] = idx(sx,sy);
+
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+
+    while(head<tail){
+      const x=qx[head], y=qy[head]; head++;
+      if(x===tx && y===ty) break;
+
+      for(const d of dirs){
+        let nx=x+d.dx, ny=y+d.dy;
+
+        // ghost wrap on tunnel row
+        if(ny===WRAP_ROW && nx===0) nx=COLS-2;
+        else if(ny===WRAP_ROW && nx===COLS-1) nx=1;
+
+        if(ny<=0 || ny>=ROWS-1) continue;
+        if(nx<=0 || nx>=COLS-1) continue;
+        if(isWall(m,nx,ny)) continue;
+
+        const ni=idx(nx,ny);
+        if(prev[ni]!==-1) continue;
+        prev[ni]=idx(x,y);
+        qx[tail]=nx; qy[tail]=ny; tail++;
+      }
+    }
+
+    const targetIndex = idx(tx,ty);
+    if(prev[targetIndex]===-1){
+      // no path, do nothing
+      return {dx:0,dy:0};
+    }
+
+    // walk back from target to start to find first step
+    let cur = targetIndex;
+    while(true){
+      const p = prev[cur];
+      if(p===cur) break;
+      if(p===idx(sx,sy)){
+        const cx = cur % COLS;
+        const cy = Math.floor(cur / COLS);
+        const dx = cx - sx;
+        const dy = cy - sy;
+        // normalize wrap direction
+        if(dy===0 && sy===WRAP_ROW){
+          if(sx===1 && cx===COLS-2) return {dx:-1,dy:0};
+          if(sx===COLS-2 && cx===1) return {dx:1,dy:0};
+        }
+        return {dx: clamp(dx,-1,1), dy: clamp(dy,-1,1)};
+      }
+      cur = p;
+    }
+    return {dx:0,dy:0};
+  }
+
+  // Ghost targeting personalities
+  function ghostTarget(g){
+    // EATEN returns to depot
+    if(g.mode==="EATEN") return depot;
+
+    // FRIGHT runs away to farthest corner-ish point relative to player
+    if(g.mode==="FRIGHT"){
+      const tx = (player.x < COLS/2) ? COLS-3 : 2;
+      const ty = (player.y < ROWS/2) ? ROWS-3 : 2;
+      return {x:tx, y:ty};
+    }
+
+    // CHASE personalities
+    if(g.name==="SMOG"){
+      // direct chase
+      return {x:player.x, y:player.y};
+    }
+    if(g.name==="SIREN"){
+      // ambush: aim 4 tiles ahead of player direction guess
+      let dx=0,dy=0;
+      if(keys.has("arrowleft")||keys.has("a")) dx=-1;
+      else if(keys.has("arrowright")||keys.has("d")) dx=1;
+      else if(keys.has("arrowup")||keys.has("w")) dy=-1;
+      else if(keys.has("arrowdown")||keys.has("s")) dy=1;
+      return {x: clamp(player.x+dx*4, 1, COLS-2), y: clamp(player.y+dy*4, 1, ROWS-2)};
+    }
+    if(g.name==="HEAT"){
+      // cut-off: aim between player and metro (pressure commute)
+      const m = (state===STATE.WEST) ? westMetro : eastMetro;
+      return {x: clamp(Math.round((player.x+m.x)/2), 1, COLS-2), y: clamp(Math.round((player.y+m.y)/2), 1, ROWS-2)};
+    }
+    // STRESS: slightly jittery but still homing
+    return {x: clamp(player.x + (Math.random()<0.5?1:-1), 1, COLS-2), y: player.y};
+  }
+
+  // Update ghosts using BFS shortest-path next step (real hunting)
+  function updateGhosts(dt){
+    const m=curMap();
+
+    for(const g of ghosts){
+      if(g.mode==="EATEN"){
+        g.eatenTimer -= dt;
+        if(g.eatenTimer<=0){
+          g.mode="CHASE";
+          g.x=depot.x; g.y=depot.y;
+          g.acc=0;
+        }
+      }
+
+      let spd = g.speed;
+      if(g.mode==="FRIGHT") spd *= 0.72;
+      if(g.mode==="EATEN") spd *= 1.55;
+
+      g.acc += dt * spd;
+
+      while(g.acc >= 1){
+        g.acc -= 1;
+
+        const tgt = ghostTarget(g);
+
+        // compute best next step
+        let step = bfsNextStep(m, g.x, g.y, tgt.x, tgt.y);
+
+        // slight randomness for FRIGHT
+        if(g.mode==="FRIGHT" && Math.random()<0.35){
+          const opts = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}].filter(d=>{
+            let nx=g.x+d.dx, ny=g.y+d.dy;
+            if(ny===WRAP_ROW && nx===0) nx=COLS-2;
+            else if(ny===WRAP_ROW && nx===COLS-1) nx=1;
+            return canMove(m,nx,ny);
+          });
+          if(opts.length) step = opts[(Math.random()*opts.length)|0];
+        }
+
+        // move
+        let nx=g.x+step.dx, ny=g.y+step.dy;
+        if(ny===WRAP_ROW && nx===0) nx=COLS-2;
+        else if(ny===WRAP_ROW && nx===COLS-1) nx=1;
+
+        if(canMove(m,nx,ny)){
+          g.x=nx; g.y=ny;
+          g.lastDir = step;
+        }
+      }
+
+      g.px=g.x*TILE;
+      g.py=g.y*TILE;
+    }
+  }
+
+  // Buses: follow ROAD network with simple forward preference, no wall crossing
+  function isRoad(m,x,y){ return tileAt(m,x,y)===T.ROAD; }
+  function updateBuses(dt){
+    const m=curMap();
+    for(const b of buses){
+      b.acc += dt * 3.0;
+      while(b.acc >= 1){
+        b.acc -= 1;
+
+        // choose next road step, prefer continuing direction
+        const dirs = [{dx:b.lastDir.dx,dy:b.lastDir.dy},{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+        let chosen=null;
+        for(const d of dirs){
+          let nx=b.x+d.dx, ny=b.y+d.dy;
+
+          // wrap only if on wrap row and road continues
+          if(ny===WRAP_ROW && nx===0) nx=COLS-2;
+          else if(ny===WRAP_ROW && nx===COLS-1) nx=1;
+
+          if(ny<=0 || ny>=ROWS-1) continue;
+          if(nx<=0 || nx>=COLS-1) continue;
+
+          if(isRoad(m,nx,ny)){
+            chosen={dx:d.dx,dy:d.dy, nx, ny};
+            break;
+          }
+        }
+
+        if(!chosen){
+          // if dead end, turn around
+          b.lastDir = {dx:-b.lastDir.dx, dy:-b.lastDir.dy};
+          continue;
+        }
+
+        b.x=chosen.nx; b.y=chosen.ny;
+        b.lastDir = {dx:chosen.dx, dy:chosen.dy};
+      }
+
+      b.px=b.x*TILE;
+      b.py=b.y*TILE;
+    }
+  }
+
+  // Player movement: grid-stepped, wrap tunnel works
+  let moveAcc = 0;
+  function updatePlayer(dt){
+    const m=curMap();
+    moveAcc += dt * player.speed;
+
+    let dx=0,dy=0;
+    if(keys.has("arrowleft")||keys.has("a")) dx=-1;
+    else if(keys.has("arrowright")||keys.has("d")) dx=1;
+    else if(keys.has("arrowup")||keys.has("w")) dy=-1;
+    else if(keys.has("arrowdown")||keys.has("s")) dy=1;
+
+    while(moveAcc>=1){
+      moveAcc -= 1;
+
+      let nx=player.x+dx, ny=player.y+dy;
+
+      // allow tunnel wrap through border openings on WRAP_ROW
+      if(ny===WRAP_ROW && nx===0) nx=COLS-2;
+      else if(ny===WRAP_ROW && nx===COLS-1) nx=1;
+
+      if((dx||dy) && canMove(m,nx,ny)){
+        player.x=nx; player.y=ny;
+        if(Math.random()<0.12) sfx(210,0.02,0.010,"square",0);
+      }
+
+      handlePickups();
+    }
+
+    player.px=player.x*TILE;
+    player.py=player.y*TILE;
+  }
+
+  // Damage and power logic
+  function applyDamage(dt){
+    const m=curMap();
+    if(player.invuln>0) player.invuln -= dt;
+
+    if(player.power.active){
+      player.power.t += dt;
+      if(player.power.t >= player.power.dur){
+        player.power.active=false;
+        for(const g of ghosts){
+          if(g.mode==="FRIGHT") g.mode="CHASE";
+        }
+      }
+    }
+
+    const pcx=player.px+TILE/2, pcy=player.py+TILE/2;
+
+    // bus exposure (minor damage multiplier if standing too close)
+    let busNear=false;
+    for(const b of buses){
+      const bx=b.px+TILE/2, by=b.py+TILE/2;
+      if(dist(pcx,pcy,bx,by) < 46){ busNear=true; break; }
+    }
+
+    const safe = isSafe(m, player.x, player.y);
+
+    // ghost collision
+    const hitR=14;
+    let hit=null;
+    for(const g of ghosts){
+      const gx=g.px+TILE/2, gy=g.py+TILE/2;
+      if(dist(pcx,pcy,gx,gy) <= hitR){ hit=g; break; }
+    }
+
+    // powered: eat frightened ghost
+    if(hit && player.power.active && hit.mode==="FRIGHT"){
+      hit.mode="EATEN";
+      hit.eatenTimer = 1.6;
+      player.score += 120;
+      player.invuln = 0.20;
+      sfx(980,0.06,0.05,"square",120);
+      return;
+    }
+
+    // take damage
+    let dmgMul = 1.0;
+    if(busNear) dmgMul *= 1.12;
+    if(safe) dmgMul *= level.safeDmgMul;
+
+    if(hit && player.invuln<=0 && hit.mode!=="EATEN"){
+      player.hp -= level.dps * dmgMul * dt;
+      player.invuln = 0.38;
+      sfx(240,0.04,0.030,"square",-30);
+    } else {
+      // regen
+      const regen = level.regen * (safe ? level.safeRegenMul : 1.0);
+      player.hp += regen * dt;
+    }
+
+    player.hp = clamp(player.hp,0,player.maxHp);
+    if(player.hp<=0){
+      state=STATE.GAMEOVER;
+      sfx(110,0.14,0.06,"square",-55);
+    }
+  }
+
+  // Title / toggles
+  function handleUI(dt){
     if(keys.has("m")){ keys.delete("m"); muted=!muted; sfx(muted?160:760,0.06,0.05,"square",0); }
     if(keys.has("h")){ keys.delete("h"); showHelp=!showHelp; sfx(620,0.04,0.03,"square", showHelp?40:-40); }
 
@@ -909,337 +1171,113 @@
       }
     }
 
-    // Buffer (minor damage reduction)
-    player.bufferCd -= dt;
-    if(player.buffer.active){
-      player.buffer.t += dt;
-      if(player.buffer.t>=player.buffer.dur) player.buffer.active=false;
+    if(keys.has("space") && (state===STATE.WEST||state===STATE.EAST)){
+      // optional: allow manual trigger only if player currently has power pellet effect available?
+      // For now, Space does nothing extra beyond collected Support. Keep it simple.
     }
-    if(keys.has("space") && player.bufferCd<=0 && (state===STATE.WEST||state===STATE.EAST)){
-      keys.delete("space");
-      player.buffer.active=true; player.buffer.t=0;
-      player.bufferCd=4.0;
-      sfx(640,0.08,0.04,"triangle",0);
-      sfx(980,0.04,0.03,"square",0);
-    }
+  }
 
-    if(player.invuln>0) player.invuln -= dt;
+  function resetAll(){
+    state=STATE.WEST;
+    player.x=westHome.x; player.y=westHome.y;
+    player.hp=100; player.carried=0; player.score=0; player.invuln=0;
+    player.power.active=false; player.power.t=0;
+    banked=0;
 
-    // Power timer
-    if(player.power.active){
-      player.power.t += dt;
-      if(player.power.t >= player.power.dur){
-        player.power.active=false;
-        // ghosts revert to chase if not eaten
-        for(const g of ghosts){
-          if(g.mode==="FRIGHT") g.mode="CHASE";
-        }
+    // reset ghosts
+    const starts = [{x:depot.x-1,y:depot.y},{x:depot.x+1,y:depot.y},{x:depot.x,y:depot.y-1},{x:depot.x,y:depot.y+1}];
+    ghosts.forEach((g,i)=>{
+      g.x=starts[i].x; g.y=starts[i].y;
+      g.mode="CHASE";
+      g.eatenTimer=0;
+      g.acc=0;
+      g.lastDir={dx:0,dy:0};
+    });
+
+    // buses start on road tiles
+    buses[0].x=2; buses[0].y=WRAP_ROW;
+    buses[0].lastDir={dx:1,dy:0}; buses[0].acc=0;
+    buses[1].x=COLS-3; buses[1].y=WRAP_ROW;
+    buses[1].lastDir={dx:-1,dy:0}; buses[1].acc=0;
+
+    player.px=player.x*TILE; player.py=player.y*TILE;
+  }
+
+  // Pickups placement tweak: ensure dots exist in open areas for route feel
+  function sprinkleDots(m){
+    for(let y=1;y<ROWS-1;y++){
+      for(let x=1;x<COLS-1;x++){
+        if(m[y][x]===T.FLOOR && Math.random()<0.14) m[y][x]=T.DOT;
       }
     }
   }
+  sprinkleDots(west);
+  sprinkleDots(east);
 
-  // Movement: grid-stepped with wrap tunnels
-  let moveAcc=0;
-  function updatePlayer(dt){
-    const m=curMap();
-    const sprint = keys.has("shift");
-    const spd = player.speed * (sprint ? player.sprintMul : 1);
-    if(sprint) player.hp -= dt*0.9;
-
-    moveAcc += dt*spd;
-
-    let dx=0,dy=0;
-    if(keys.has("arrowleft")||keys.has("a")) dx=-1;
-    else if(keys.has("arrowright")||keys.has("d")) dx=1;
-    else if(keys.has("arrowup")||keys.has("w")) dy=-1;
-    else if(keys.has("arrowdown")||keys.has("s")) dy=1;
-
-    while(moveAcc>=1){
-      moveAcc -= 1;
-      let nx=player.x+dx, ny=player.y+dy;
-
-      // wrap only horizontally
-      nx = wrapX(nx);
-
-      if((dx||dy) && canMove(m,nx,ny)){
-        player.x=nx; player.y=ny;
-        if(Math.random()<0.14) sfx(210,0.02,0.010,"square",0);
-      }
-      handlePickups();
-    }
-
-    player.px = player.x*TILE;
-    player.py = player.y*TILE;
-  }
-
-  // Ghost AI
-  function updateRhythm(dt){
-    rhythm.t += dt;
-    if(rhythm.phase==="CHASE" && rhythm.t>=rhythm.chase){ rhythm.phase="SCATTER"; rhythm.t=0; }
-    else if(rhythm.phase==="SCATTER" && rhythm.t>=rhythm.scatter){ rhythm.phase="CHASE"; rhythm.t=0; }
-  }
-
-  function ghostTarget(g){
-    if(g.mode==="EATEN") return depot;
-    if(g.mode==="FRIGHT"){
-      // run away: target opposite of player
-      return {x: clamp(COLS-1-player.x,1,COLS-2), y: clamp(ROWS-1-player.y,1,ROWS-2)};
-    }
-    if(rhythm.phase==="SCATTER"){
-      const corners={
-        "SMOG":{x:2,y:2},
-        "SIREN":{x:COLS-3,y:2},
-        "HEAT":{x:2,y:ROWS-3},
-        "STRESS":{x:COLS-3,y:ROWS-3},
-      };
-      return corners[g.name] || {x:2,y:2};
-    }
-    // CHASE
-    if(g.name==="SIREN") return {x: clamp(player.x + (player.x%2?2:-2),1,COLS-2), y: player.y};
-    if(g.name==="HEAT") return (state===STATE.EAST) ? findTile(east,T.WAGE) : {x:player.x,y:player.y};
-    return {x:player.x,y:player.y};
-  }
-
-  function chooseDir(g,m){
-    const dirs=[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
-    const tgt=ghostTarget(g);
-    let best=null, bestScore=1e9;
-
-    for(const d of dirs){
-      let nx=wrapX(g.x+d.dx);
-      const ny=g.y+d.dy;
-      if(!canMove(m,nx,ny)) continue;
-
-      // avoid immediate reversal most of the time
-      if(d.dx===-g.vx && d.dy===-g.vy && Math.random()<0.85) continue;
-
-      const md=Math.abs(tgt.x-nx)+Math.abs(tgt.y-ny);
-      let score=md + rand(0,0.12);
-
-      if(g.mode==="FRIGHT") score += rand(0,1.0); // wobble
-      if(g.mode==="EATEN") score *= 0.85;         // beeline
-      if(g.name==="SIREN") score += (d.dx===g.vx && d.dy===g.vy) ? -0.22 : 0.08;
-
-      if(score<bestScore){ bestScore=score; best=d; }
-    }
-    if(!best){
-      for(const d of dirs){
-        let nx=wrapX(g.x+d.dx);
-        const ny=g.y+d.dy;
-        if(canMove(m,nx,ny)){ best=d; break; }
-      }
-    }
-    return best || {dx:0,dy:0};
-  }
-
-  function updateGhosts(dt){
-    const m=curMap();
-    updateRhythm(dt);
-
-    for(const g of ghosts){
-      // eaten respawn
-      if(g.mode==="EATEN"){
-        g.eatenTimer -= dt;
-        if(g.eatenTimer<=0){
-          g.mode="CHASE";
-          g.x=depot.x; g.y=depot.y;
-          g.vx=0; g.vy=0;
-        }
-      }
-
-      // speed changes
-      let spd=g.speed;
-      if(g.mode==="FRIGHT") spd *= level.powerGhostSpeedMul;
-      if(g.mode==="EATEN") spd *= 1.45;
-
-      g.acc += dt*spd;
-
-      while(g.acc>=1){
-        g.acc -= 1;
-        const d=chooseDir(g,m);
-        g.vx=d.dx; g.vy=d.dy;
-
-        let nx=wrapX(g.x+g.vx);
-        const ny=g.y+g.vy;
-        if(canMove(m,nx,ny)){ g.x=nx; g.y=ny; }
-
-        // seed smog puffs sometimes (city feel)
-        if(g.name==="SMOG" && Math.random() < (state===STATE.WEST ? 0.18 : 0.10)){
-          smogPuffs.push({ x:g.x*TILE+TILE/2+rand(-6,6), y:g.y*TILE+TILE/2+rand(-6,6), r:rand(18,30), t:2.8 });
-        }
-      }
-
-      g.px=g.x*TILE;
-      g.py=g.y*TILE;
-    }
-  }
-
-  function updateBuses(dt){
-    // buses move and add “exposure” if you stand near them
-    for(const b of buses){
-      b.x += b.dir * b.speed * dt;
-      if(b.x<=1){ b.x=1; b.dir=1; }
-      if(b.x>=COLS-2){ b.x=COLS-2; b.dir=-1; }
-    }
-  }
-
-  function updateSmog(dt){
-    for(let i=smogPuffs.length-1;i>=0;i--){
-      smogPuffs[i].t -= dt;
-      if(smogPuffs[i].t<=0) smogPuffs.splice(i,1);
-    }
-    // ambient west smog
-    if(state===STATE.WEST && Math.random() < dt*0.25){
-      smogPuffs.push({ x:rand(0,W), y:rand(240,H), r:rand(16,28), t:2.4 });
-    }
-  }
-
-  function drawSmog(){
-    ctx.save();
-    for(const s of smogPuffs){
-      const a=clamp(s.t/2.8,0,1)*0.15;
-      ctx.globalAlpha=a;
-      ctx.fillStyle="#D7FFD9";
-      ctx.beginPath();
-      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // Damage logic: ghosts chase, power-up allows “eat” ghosts
-  function applyDamage(dt){
-    const m=curMap();
-    const pcx=player.px+TILE/2;
-    const pcy=player.py+TILE/2;
-
-    // exposure from bus proximity
-    let busExposure=false;
-    for(const b of buses){
-      const bx=b.x*TILE+TILE/2;
-      const by=b.laneY*TILE+TILE/2;
-      if(dist(pcx,pcy,bx,by) < 48) { busExposure=true; break; }
-    }
-
-    // smog exposure
-    let smog=false;
-    for(const s of smogPuffs){
-      if(dist(pcx,pcy,s.x,s.y) < s.r*0.85){ smog=true; break; }
-    }
-
-    // safe healing zones
-    const safe = (tileAt(m,player.x,player.y)===T.SAFE) || (tileAt(m,player.x,player.y)===T.HOME);
-
-    // collision with ghosts
-    const hitR=14;
-    let hitGhost=null;
-    for(const g of ghosts){
-      const gcx=g.px+TILE/2, gcy=g.py+TILE/2;
-      if(dist(pcx,pcy,gcx,gcy)<=hitR){ hitGhost=g; break; }
-    }
-
-    // multipliers
-    let dmgMul=1.0;
-    if(busExposure) dmgMul *= 1.15;
-    if(smog) dmgMul *= 1.18;
-    if(player.buffer.active) dmgMul *= 0.84;
-    if(safe) dmgMul *= level.safeDmg;
-
-    // If powered and ghost is frightened: eat it (send back)
-    if(hitGhost && player.power.active && hitGhost.mode==="FRIGHT"){
-      hitGhost.mode="EATEN";
-      hitGhost.eatenTimer = 1.6;
-      sfx(980,0.06,0.05,"square",120);
-      player.score += 120;
-      player.invuln = 0.25;
-      return;
-    }
-
-    // If hit while not invuln
-    if(hitGhost && player.invuln<=0 && hitGhost.mode!=="EATEN"){
-      // small grace to avoid “stun lock”
-      player.hp -= level.dps * dmgMul * dt;
-      player.invuln = 0.38;
-      sfx(240,0.04,0.030,"square",-30);
-    } else {
-      // regen
-      const r = safe ? level.regen * level.safeRegen : level.regen;
-      player.hp += r * dt;
-    }
-
-    player.hp = clamp(player.hp,0,player.maxHp);
-    if(player.hp<=0){
-      state=STATE.GAMEOVER;
-      sfx(110,0.14,0.06,"square",-55);
-    }
-  }
-
-  function drawMetro(){
-    const m=curMap();
-    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-      if(tileAt(m,x,y)!==T.METRO) continue;
-      const gx=x*TILE, gy=y*TILE;
-      const cx=gx+TILE/2, cy=gy+TILE/2;
-
-      const pulse=0.55+0.45*Math.sin(now*5.1);
-      ctx.save();
-      ctx.globalAlpha=0.22+0.10*pulse;
-      ctx.fillStyle="rgba(127,177,255,0.65)";
-      ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.fill();
-
-      ctx.globalAlpha=1;
-      ctx.fillStyle="rgba(7,12,18,0.82)";
-      rr(gx-16, gy-10, TILE+32, TILE+22, 12); ctx.fill();
-      ctx.strokeStyle="rgba(127,177,255,0.65)";
-      ctx.lineWidth=2; ctx.stroke();
-      ctx.fillStyle="rgba(127,177,255,0.22)";
-      rr(gx-10, gy-8, TILE+20, 18, 10); ctx.fill();
-      ctx.fillStyle="#E8F1FF";
-      ctx.font="bold 12px ui-monospace, monospace";
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("METRO", cx, gy+2);
-      ctx.restore();
-    }
-  }
-
-  function drawScanlines(){
-    ctx.save();
-    ctx.globalAlpha=0.13;
-    for(let y=0;y<H;y+=3){
-      ctx.fillStyle="rgba(0,0,0,0.35)";
-      ctx.fillRect(0,y,W,1);
-    }
-    ctx.restore();
-  }
-
+  // Music update
   function updateMusic(dt){
     if(state===STATE.TITLE || state===STATE.GAMEOVER) return;
     if(!audioCtx || muted) return;
-    const spb=60/music.bpm;
-    const stepDur=spb/4;
+    const spb = 60/music.bpm;
+    const stepDur = spb/4;
     music.timer += dt;
     while(music.timer>=stepDur){
       music.timer -= stepDur;
-      music.step=(music.step+1)%16;
+      music.step = (music.step+1)%16;
       musicTick();
     }
   }
 
-  // Main loop
-  let last=0;
-  function loop(ts){
-    now=ts/1000;
-    const dt=clamp((ts-last)/1000,0,0.033);
-    last=ts;
+  // Gameplay: bank wages in west, collect wages in east
+  function enforceGoal(){
+    // On EAST, keep at least a few wage tiles alive
+    if(state===STATE.EAST){
+      const m=east;
+      let count=0;
+      for(let y=1;y<ROWS-1;y++) for(let x=1;x<COLS-1;x++) if(m[y][x]===T.WAGE) count++;
+      if(count<5){
+        // respawn some wages on floor tiles
+        for(let tries=0; tries<200 && count<7; tries++){
+          const x=(Math.random()*(COLS-2)|0)+1;
+          const y=(Math.random()*(ROWS-2)|0)+1;
+          if(m[y][x]===T.FLOOR || m[y][x]===T.DOT){ m[y][x]=T.WAGE; count++; }
+        }
+      }
+    }
+  }
 
-    handleControls(dt);
+  // Draw scanlines
+  function drawAll(){
+    drawBackdrop(state);
+
+    drawMap();
+
+    // entities
+    for(const b of buses) drawBus(b);
+    for(const g of ghosts) drawGhost(g);
+    drawPlayer();
+    drawHUD();
+    drawHelp();
+
+    drawScanlines();
+  }
+
+  // Loop
+  let now=0, last=0;
+  function loop(ts){
+    now = ts/1000;
+    const dt = clamp((ts-last)/1000, 0, 0.033);
+    last = ts;
+
+    handleUI(dt);
 
     if(state===STATE.TITLE){
-      drawBackdrop("WEST");
+      drawBackdrop(STATE.WEST);
       overlay("SANTIAGO METRO ESCAPE", [
         "A Pac-style commute game about the exposome and brain health.",
-        "Collect WAGES in the East and BANK them at Home in the West.",
-        "Support power lets you send ghosts back to the depot briefly.",
+        "Ghosts actively hunt you via shortest-path logic.",
+        "Collect WAGES in the East, BANK them at Home in the West.",
+        "Support pellets frighten ghosts. Tag them to send them to the depot.",
         "Press Enter to start. Press H for help."
       ]);
       drawScanlines();
@@ -1251,42 +1289,102 @@
       updatePlayer(dt);
       updateGhosts(dt);
       updateBuses(dt);
-      updateSmog(dt);
       applyDamage(dt);
-      player.score += dt*7;
+      enforceGoal();
       updateMusic(dt);
+
+      // banked progress is handled in pickups
+      player.score += dt * 6.0;
     }
 
-    // Draw
-    drawBackdrop(state===STATE.WEST?"WEST":"EAST");
-    drawMap();
-
-    // buses and metro and smog are “city feel”
-    for(const b of buses) drawBus(b);
-    drawMetro();
-    drawSmog();
-
-    // entities
-    for(const g of ghosts) drawGhost(g);
-    drawPlayer();
-    drawHUD();
-    drawHelp();
-
     if(state===STATE.GAMEOVER){
+      drawBackdrop(state);
+      drawMap();
+      for(const b of buses) drawBus(b);
+      for(const g of ghosts) drawGhost(g);
+      drawPlayer();
+      drawHUD();
       overlay("COGNITIVE COLLAPSE", [
         `Score: ${Math.floor(player.score)}`,
-        `Wages delivered this cycle: ${banked}`,
+        `Wages delivered: ${banked}`,
         "",
         "Press Enter to restart"
       ]);
+      drawScanlines();
+      requestAnimationFrame(loop);
+      return;
     }
 
-    drawScanlines();
-
+    drawAll();
     requestAnimationFrame(loop);
   }
 
-  // Start
+  // Patch pickups banking logic into handlePickups
+  const _handlePickups = handlePickups;
+  function handlePickups(){
+    const m=curMap();
+    const t=tileAt(m, player.x, player.y);
+
+    if(t===T.DOT){
+      m[player.y][player.x]=T.FLOOR;
+      player.score += 2;
+      sfx(720,0.03,0.020,"square",60);
+    }
+
+    if(t===T.WAGE){
+      m[player.y][player.x]=T.FLOOR;
+      player.carried += 1;
+      player.score += 40;
+      sfx(920,0.05,0.04,"square",80);
+    }
+
+    if(t===T.SUPPORT){
+      m[player.y][player.x]=T.FLOOR;
+      player.power.active=true;
+      player.power.t=0;
+      for(const g of ghosts){
+        if(g.mode!=="EATEN") g.mode="FRIGHT";
+      }
+      sfx(660,0.10,0.05,"triangle",0);
+      sfx(980,0.06,0.04,"square",0);
+    }
+
+    if(t===T.METRO){
+      if(state===STATE.WEST){
+        state=STATE.EAST;
+        player.x = eastMetro.x;
+        player.y = eastMetro.y+1;
+      } else {
+        state=STATE.WEST;
+        player.x = westMetro.x;
+        player.y = westMetro.y-1;
+      }
+      for(const g of ghosts){
+        g.x = depot.x + (Math.random()<0.5?-3:3);
+        g.y = depot.y + (Math.random()<0.5?-2:2);
+        g.acc=0; g.lastDir={dx:0,dy:0};
+        if(g.mode==="EATEN") g.mode="CHASE";
+      }
+      sfx(320,0.08,0.04,"triangle",-60);
+      sfx(520,0.06,0.04,"square",60);
+    }
+
+    if(state===STATE.WEST && t===T.HOME && player.carried>0){
+      banked += player.carried;
+      player.score += player.carried*80;
+      player.carried = 0;
+
+      if(banked >= level.goalWages){
+        player.score += 350;
+        banked = 0;
+        sfx(740,0.09,0.05,"square",90);
+        sfx(520,0.12,0.05,"triangle",0);
+      } else {
+        sfx(520,0.08,0.04,"triangle",0);
+      }
+    }
+  }
+
   resetAll();
   requestAnimationFrame(loop);
 })();
